@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useDrag } from 'react-dnd';
-import { Player, PlayerState, Gender, Rank } from '../types/index';
+import { Player, PlayerState, Gender, Rank, Team } from '../types/index';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { UserPlus, Edit2, Trash2, Check, X, GripVertical, Plus, Minus, ChevronDown, Info } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Check, X, GripVertical, Plus, Minus, ChevronDown, Info, ArrowLeftRight } from 'lucide-react';
 import { ItemTypes } from './DraggablePlayerChip';
 import { PlayerHistoryDialog } from './PlayerHistoryDialog';
+import { SwapPlayerWithTeamDialog } from './SwapPlayerWithTeamDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,12 +24,14 @@ import {
 
 interface PlayerPanelProps {
   players: Player[];
+  teams?: Team[];
   onAddPlayer: (name: string) => void;
   onUpdatePlayer: (id: string, updates: Partial<Player>) => void;
   onUpdatePlayerState: (id: string, state: PlayerState) => void;
   onDeletePlayer: (id: string) => void;
   onAdjustGameCount: (id: string, delta: number) => void;
   onReturnToWaiting: (playerId: string, teamId: string) => void;
+  onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
 }
 
 const STATE_LABELS: Record<PlayerState, string> = {
@@ -49,12 +52,14 @@ const STATE_COLORS: Record<PlayerState, string> = {
 
 export function PlayerPanel({
   players,
+  teams,
   onAddPlayer,
   onUpdatePlayer,
   onUpdatePlayerState,
   onDeletePlayer,
   onAdjustGameCount,
   onReturnToWaiting,
+  onSwapPlayer,
 }: PlayerPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -126,6 +131,7 @@ export function PlayerPanel({
                 onAdjustGameCount={onAdjustGameCount}
                 onUpdatePlayer={onUpdatePlayer}
                 getNextState={getNextState}
+                onSwapPlayer={onSwapPlayer}
               />
             ))
           )}
@@ -224,6 +230,7 @@ interface WaitingPlayerCardProps {
   onAdjustGameCount: (id: string, delta: number) => void;
   onUpdatePlayer: (id: string, updates: Partial<Player>) => void;
   getNextState: (current: PlayerState) => PlayerState;
+  onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
 }
 
 function WaitingPlayerCard({
@@ -240,6 +247,7 @@ function WaitingPlayerCard({
   onAdjustGameCount,
   onUpdatePlayer,
   getNextState,
+  onSwapPlayer,
 }: WaitingPlayerCardProps) {
   const [showHistory, setShowHistory] = useState(false);
   

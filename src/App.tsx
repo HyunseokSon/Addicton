@@ -275,12 +275,14 @@ export default function App() {
                   <TabsContent value="players" className="mt-0">
                     <PlayerPanel
                       players={state.players}
+                      teams={state.teams}
                       onAddPlayer={addPlayer}
                       onUpdatePlayer={updatePlayer}
                       onUpdatePlayerState={updatePlayerState}
                       onDeletePlayer={deletePlayer}
                       onAdjustGameCount={adjustGameCount}
                       onReturnToWaiting={handleReturnToWaiting}
+                      onSwapPlayer={handleSwapPlayer}
                     />
                   </TabsContent>
                   <TabsContent value="members" className="mt-0">
