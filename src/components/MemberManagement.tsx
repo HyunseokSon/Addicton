@@ -1,0 +1,337 @@
+import { useState } from 'react';
+import { Member, Gender, Rank, Player } from '../types/index';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Badge } from './ui/badge';
+import { UserPlus, Edit2, Trash2, Check, X, UserCheck, CheckCircle2, Search, Filter } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+
+interface MemberManagementProps {
+  members: Member[];
+  players: Player[];
+  onAddMember: (name: string, gender?: Gender, rank?: Rank) => void;
+  onUpdateMember: (id: string, updates: Partial<Member>) => void;
+  onDeleteMember: (id: string) => void;
+  onAddMemberAsPlayer: (memberId: string) => void;
+}
+
+export function MemberManagement({
+  members,
+  players,
+  onAddMember,
+  onUpdateMember,
+  onDeleteMember,
+  onAddMemberAsPlayer,
+}: MemberManagementProps) {
+  const [newName, setNewName] = useState('');
+  const [newGender, setNewGender] = useState<Gender | ''>('');
+  const [newRank, setNewRank] = useState<Rank | ''>('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [editingGender, setEditingGender] = useState<Gender | ''>('');
+  const [editingRank, setEditingRank] = useState<Rank | ''>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'registered' | 'notRegistered'>('all');
+
+  // Check if a member is already registered as a player
+  const isMemberRegistered = (memberName: string) => {
+    return players.some(player => player.name.startsWith(memberName));
+  };
+
+  // Filter members based on search and status
+  const filteredMembers = members.filter((member) => {
+    // Search filter
+    const matchesSearch = member.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Status filter
+    const isRegistered = isMemberRegistered(member.name);
+    const matchesStatus = 
+      filterStatus === 'all' ||
+      (filterStatus === 'registered' && isRegistered) ||
+      (filterStatus === 'notRegistered' && !isRegistered);
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleAdd = () => {
+    if (newName.trim()) {
+      onAddMember(
+        newName.trim(),
+        newGender || undefined,
+        newRank || undefined
+      );
+      setNewName('');
+      setNewGender('');
+      setNewRank('');
+    }
+  };
+
+  const handleStartEdit = (member: Member) => {
+    setEditingId(member.id);
+    setEditingName(member.name);
+    setEditingGender(member.gender || '');
+    setEditingRank(member.rank || '');
+  };
+
+  const handleSaveEdit = () => {
+    if (editingId && editingName.trim()) {
+      onUpdateMember(editingId, {
+        name: editingName.trim(),
+        gender: editingGender || undefined,
+        rank: editingRank || undefined,
+      });
+      setEditingId(null);
+      setEditingName('');
+      setEditingGender('');
+      setEditingRank('');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingName('');
+    setEditingGender('');
+    setEditingRank('');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Add Member Form */}
+      <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-semibold text-sm text-gray-700 mb-3">모임원 추가</h3>
+        <div className="space-y-2">
+          <Input
+            type="text"
+            placeholder="이름 입력"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+            className="w-full"
+          />
+          <div className="flex gap-2">
+            <Select
+              value={newGender}
+              onValueChange={(value) => setNewGender(value as Gender)}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="성별 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="남">남</SelectItem>
+                <SelectItem value="녀">녀</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={newRank}
+              onValueChange={(value) => setNewRank(value as Rank)}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="급수 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="S">S</SelectItem>
+                <SelectItem value="A">A</SelectItem>
+                <SelectItem value="B">B</SelectItem>
+                <SelectItem value="C">C</SelectItem>
+                <SelectItem value="D">D</SelectItem>
+                <SelectItem value="E">E</SelectItem>
+                <SelectItem value="F">F</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handleAdd} className="w-full bg-blue-600 hover:bg-blue-700">
+            <UserPlus className="size-4 mr-2" />
+            모임원 추가
+          </Button>
+        </div>
+      </div>
+
+      {/* Members List */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm text-gray-700">등록된 모임원</h3>
+          <Badge variant="secondary" className="text-xs px-2 py-0.5">
+            {filteredMembers.length}/{members.length}명
+          </Badge>
+        </div>
+        
+        {/* Search and Filter */}
+        <div className="space-y-2 mb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="이름 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <ToggleGroup
+            type="single"
+            value={filterStatus}
+            onValueChange={(value) => value && setFilterStatus(value as any)}
+            className="justify-start"
+          >
+            <ToggleGroupItem value="all" className="text-xs">
+              전체
+            </ToggleGroupItem>
+            <ToggleGroupItem value="registered" className="text-xs">
+              참가중
+            </ToggleGroupItem>
+            <ToggleGroupItem value="notRegistered" className="text-xs">
+              미참가
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        
+        <div className="space-y-2">
+          {filteredMembers.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+              <p className="text-sm text-gray-400">
+                {searchQuery || filterStatus !== 'all' 
+                  ? '검색 결과가 없습니다' 
+                  : '등록된 모임원이 없습니다'}
+              </p>
+            </div>
+          ) : (
+            filteredMembers.map((member) => (
+              <div
+                key={member.id}
+                className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-all"
+              >
+                {editingId === member.id ? (
+                  <div className="space-y-2">
+                    <Input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      className="w-full"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <Select
+                        value={editingGender}
+                        onValueChange={(value) => setEditingGender(value as Gender)}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="성별" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="남">남</SelectItem>
+                          <SelectItem value="녀">녀</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={editingRank}
+                        onValueChange={(value) => setEditingRank(value as Rank)}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="급수" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="S">S</SelectItem>
+                          <SelectItem value="A">A</SelectItem>
+                          <SelectItem value="B">B</SelectItem>
+                          <SelectItem value="C">C</SelectItem>
+                          <SelectItem value="D">D</SelectItem>
+                          <SelectItem value="E">E</SelectItem>
+                          <SelectItem value="F">F</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSaveEdit}
+                        className="flex-1"
+                      >
+                        <Check className="size-4 mr-1" />
+                        저장
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                        className="flex-1"
+                      >
+                        <X className="size-4 mr-1" />
+                        취소
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="font-medium truncate">{member.name}</span>
+                        {member.gender && (
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">
+                            {member.gender}
+                          </Badge>
+                        )}
+                        {member.rank && (
+                          <Badge variant="outline" className="text-xs px-1.5 py-0 bg-amber-50 border-amber-300 text-amber-700">
+                            {member.rank}
+                          </Badge>
+                        )}
+                        {isMemberRegistered(member.name) && (
+                          <Badge className="text-xs px-1.5 py-0 bg-emerald-100 border-emerald-300 text-emerald-700">
+                            <CheckCircle2 className="size-3 mr-1" />
+                            참가중
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleStartEdit(member)}
+                          className="size-8 p-0 hover:bg-blue-50"
+                          title="수정"
+                        >
+                          <Edit2 className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onDeleteMember(member.id)}
+                          className="size-8 p-0 hover:bg-red-50"
+                          title="삭제"
+                        >
+                          <Trash2 className="size-3.5 text-red-600" />
+                        </Button>
+                      </div>
+                    </div>
+                    {isMemberRegistered(member.name) ? (
+                      <div className="w-full px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                        <span className="text-xs text-emerald-700 font-medium">✓ 참가 등록 완료</span>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => onAddMemberAsPlayer(member.id)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        <UserCheck className="size-4 mr-2" />
+                        참가 등록
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
