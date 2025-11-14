@@ -156,10 +156,10 @@ export function MemberManagement({
           <div className="space-y-2">
             <Input
               type="text"
-              placeholder="이름 입력"
+              placeholder="이름 입력 (필수)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+              onKeyPress={(e) => e.key === 'Enter' && newName.trim() && newGender && newRank && handleAdd()}
               className="w-full h-9 md:h-10 text-xs md:text-sm"
             />
             <div className="flex gap-2">
@@ -168,7 +168,7 @@ export function MemberManagement({
                 onValueChange={(value) => setNewGender(value as Gender)}
               >
                 <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                  <SelectValue placeholder="성별 선택" />
+                  <SelectValue placeholder="성별 선택 (필수)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="남">남</SelectItem>
@@ -180,7 +180,7 @@ export function MemberManagement({
                 onValueChange={(value) => setNewRank(value as Rank)}
               >
                 <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                  <SelectValue placeholder="급수 선택" />
+                  <SelectValue placeholder="급수 선택 (필수)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="S">S</SelectItem>
@@ -193,7 +193,11 @@ export function MemberManagement({
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleAdd} className="w-full h-9 md:h-10 bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation">
+            <Button 
+              onClick={handleAdd} 
+              disabled={!newName.trim() || !newGender || !newRank}
+              className="w-full h-9 md:h-10 bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <UserPlus className="size-3.5 md:size-4 mr-2" />
               모임원 추가
             </Button>

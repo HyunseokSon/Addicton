@@ -1,7 +1,8 @@
 import { Team, Court, Player } from '../types/index';
 import { TeamCard } from './TeamCard';
-import { Play, Users, X, PlayCircle } from 'lucide-react';
+import { Play, Users, X, PlayCircle, Zap } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 
 interface MatchingAreaProps {
   teams: Team[];
@@ -37,17 +38,31 @@ export function MatchingArea({
     <div className="space-y-4">
       {/* Batch Start Button */}
       {queuedTeams.length > 0 && !readOnly && (
-        <Button
-          onClick={onStartAllQueuedGames}
-          disabled={availableCourtCount === 0}
-          className="w-full h-12 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <PlayCircle className="size-5 mr-2" />
-          {availableCourtCount === 0 
-            ? '사용 가능한 코트 없음'
-            : `일괄 시작 (${Math.min(queuedTeams.length, availableCourtCount)}팀)`
-          }
-        </Button>
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-xl blur opacity-20 animate-pulse"></div>
+          <Button
+            onClick={onStartAllQueuedGames}
+            disabled={availableCourtCount === 0}
+            className="relative w-full h-14 md:h-16 bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-500 hover:from-emerald-600 hover:via-emerald-700 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:from-gray-400 disabled:to-gray-500 active:scale-[0.98] border-2 border-emerald-400/50"
+          >
+            <div className="flex items-center justify-center gap-2.5 md:gap-3">
+              <Zap className="size-5 md:size-6 fill-current animate-pulse" />
+              <div className="flex flex-col items-start">
+                <span className="text-sm md:text-base font-bold tracking-wide">
+                  {availableCourtCount === 0 ? '사용 가능한 코트 없음' : '게임 일괄 시작'}
+                </span>
+                {availableCourtCount > 0 && (
+                  <span className="text-[10px] md:text-xs font-normal text-emerald-100">
+                    {Math.min(queuedTeams.length, availableCourtCount)}팀 동시 시작 (코트 {availableCourtCount}개 대기)
+                  </span>
+                )}
+              </div>
+              <Badge className="ml-auto bg-white/20 text-white border-white/30 text-xs md:text-sm px-2 md:px-3 py-1">
+                {Math.min(queuedTeams.length, availableCourtCount)}팀
+              </Badge>
+            </div>
+          </Button>
+        </div>
       )}
 
       {queuedTeams.length === 0 ? (
