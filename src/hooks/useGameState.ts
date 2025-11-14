@@ -587,6 +587,7 @@ export function useGameState() {
 
   const endGame = useCallback(async (courtId: string) => {
     const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
+    let teamToDelete: string | null = null;
     
     setState((prev) => {
       const court = prev.courts.find((c) => c.id === courtId);
@@ -594,6 +595,9 @@ export function useGameState() {
       
       const team = prev.teams.find((t) => t.id === court.currentTeamId);
       if (!team) return prev;
+      
+      // Store team ID to delete from Supabase
+      teamToDelete = team.id;
       
       const now = new Date();
       
@@ -634,9 +638,8 @@ export function useGameState() {
         return p;
       });
       
-      const updatedTeams = prev.teams.map((t) =>
-        t.id === team.id ? { ...t, state: 'finished' as const, endedAt: now } : t
-      );
+      // Remove finished team from teams array
+      const updatedTeams = prev.teams.filter((t) => t.id !== team.id);
       
       const updatedCourts = prev.courts.map((c) =>
         c.id === courtId
@@ -654,6 +657,16 @@ export function useGameState() {
         courts: updatedCourts,
       };
     });
+    
+    // Delete team from Supabase
+    if (teamToDelete) {
+      try {
+        await teamsApi.delete(teamToDelete);
+        console.log(`✅ Deleted team ${teamToDelete} from Supabase`);
+      } catch (error) {
+        console.error('Failed to delete team from Supabase:', error);
+      }
+    }
     
     // Update all players' game counts and teammate history in Supabase
     try {
