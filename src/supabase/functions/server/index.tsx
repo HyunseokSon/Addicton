@@ -100,6 +100,119 @@ app.delete("/make-server-41b22d2d/members/:id", async (c) => {
   }
 });
 
+// Batch add members
+app.post("/make-server-41b22d2d/members/batch", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { members: newMembers } = body;
+    
+    if (!newMembers || !Array.isArray(newMembers)) {
+      return c.json({ error: "Invalid members data" }, 400);
+    }
+
+    const existingMembers = (await kv.get("members")) || [];
+    const updatedMembers = [...existingMembers, ...newMembers];
+    await kv.set("members", updatedMembers);
+    
+    console.log(`✅ Batch added ${newMembers.length} members`);
+    return c.json({ success: true, count: newMembers.length });
+  } catch (error) {
+    console.error("Error batch adding members:", error);
+    return c.json({ error: "Failed to batch add members", details: String(error) }, 500);
+  }
+});
+
+// Delete all members
+app.delete("/make-server-41b22d2d/members/all", async (c) => {
+  try {
+    const members = (await kv.get("members")) || [];
+    const count = members.length;
+    
+    await kv.set("members", []);
+    
+    console.log(`✅ Deleted all ${count} members`);
+    return c.json({ success: true, deletedCount: count });
+  } catch (error) {
+    console.error("Error deleting all members:", error);
+    return c.json({ error: "Failed to delete all members", details: String(error) }, 500);
+  }
+});
+
+// Reset members - delete all and add new ones atomically
+app.post("/make-server-41b22d2d/members/reset", async (c) => {
+  try {
+    const { members: newMembers } = await c.req.json();
+    
+    if (!newMembers || !Array.isArray(newMembers)) {
+      return c.json({ error: "Invalid members array" }, 400);
+    }
+    
+    // Get current count
+    const oldMembers = (await kv.get("members")) || [];
+    const deletedCount = oldMembers.length;
+    
+    // Atomic reset: delete all and set new ones
+    await kv.set("members", newMembers);
+    
+    console.log(`✅ Reset members: deleted ${deletedCount}, added ${newMembers.length}`);
+    return c.json({ success: true, deletedCount, addedCount: newMembers.length });
+  } catch (error) {
+    console.error("Error resetting members:", error);
+    return c.json({ error: "Failed to reset members", details: String(error) }, 500);
+  }
+});
+
+// Migrate gender values from 'male'/'female' to '남'/'녀'
+app.post("/make-server-41b22d2d/members/migrate-gender", async (c) => {
+  try {
+    const members = (await kv.get("members")) || [];
+    const players = (await kv.get("players")) || [];
+    
+    let membersUpdated = 0;
+    let playersUpdated = 0;
+    
+    // Migrate members
+    const updatedMembers = members.map((member: any) => {
+      if (member.gender === 'male') {
+        membersUpdated++;
+        return { ...member, gender: '남' };
+      } else if (member.gender === 'female') {
+        membersUpdated++;
+        return { ...member, gender: '녀' };
+      }
+      return member;
+    });
+    
+    // Migrate players
+    const updatedPlayers = players.map((player: any) => {
+      if (player.gender === 'male') {
+        playersUpdated++;
+        return { ...player, gender: '남' };
+      } else if (player.gender === 'female') {
+        playersUpdated++;
+        return { ...player, gender: '녀' };
+      }
+      return player;
+    });
+    
+    // Save updated data
+    await kv.set("members", updatedMembers);
+    await kv.set("players", updatedPlayers);
+    
+    console.log(`✅ Gender migration complete: ${membersUpdated} members, ${playersUpdated} players updated`);
+    return c.json({ 
+      success: true, 
+      membersUpdated, 
+      playersUpdated,
+      totalMembers: updatedMembers.length,
+      totalPlayers: updatedPlayers.length,
+    });
+  } catch (error) {
+    console.error("Error migrating gender values:", error);
+    return c.json({ error: "Failed to migrate gender values", details: String(error) }, 500);
+  }
+});
+
 // ============= PLAYERS ENDPOINTS =============
 
 // Get all players
@@ -133,6 +246,56 @@ app.post("/make-server-41b22d2d/players", async (c) => {
   }
 });
 
+// Add multiple players at once (batch)
+app.post("/make-server-41b22d2d/players/batch", async (c) => {
+  try {
+    const { players: newPlayers } = await c.req.json();
+    
+    if (!Array.isArray(newPlayers) || newPlayers.length === 0) {
+      return c.json({ error: "Invalid players data" }, 400);
+    }
+
+    // Validate all players
+    for (const player of newPlayers) {
+      if (!player || !player.id || !player.name) {
+        return c.json({ error: "Invalid player data in batch" }, 400);
+      }
+    }
+
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = [...players, ...newPlayers];
+    await kv.set("players", updatedPlayers);
+    
+    console.log(`✅ Batch added ${newPlayers.length} players`);
+    return c.json({ success: true, count: newPlayers.length });
+  } catch (error) {
+    console.error("Error batch adding players:", error);
+    return c.json({ error: "Failed to batch add players", details: String(error) }, 500);
+  }
+});
+
+// Delete multiple players at once (batch)
+app.post("/make-server-41b22d2d/players/batch-delete", async (c) => {
+  try {
+    const { playerIds } = await c.req.json();
+    
+    if (!Array.isArray(playerIds) || playerIds.length === 0) {
+      return c.json({ error: "Invalid player IDs" }, 400);
+    }
+
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = players.filter((p: any) => !playerIds.includes(p.id));
+    await kv.set("players", updatedPlayers);
+    
+    const deletedCount = players.length - updatedPlayers.length;
+    console.log(`✅ Batch deleted ${deletedCount} players`);
+    return c.json({ success: true, count: deletedCount });
+  } catch (error) {
+    console.error("Error batch deleting players:", error);
+    return c.json({ error: "Failed to batch delete players", details: String(error) }, 500);
+  }
+});
+
 // Update a player
 app.put("/make-server-41b22d2d/players/:id", async (c) => {
   try {
@@ -153,6 +316,41 @@ app.put("/make-server-41b22d2d/players/:id", async (c) => {
   } catch (error) {
     console.error("Error updating player:", error);
     return c.json({ error: "Failed to update player", details: String(error) }, 500);
+  }
+});
+
+// Batch update players
+app.post("/make-server-41b22d2d/players/batch-update", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { playerUpdates } = body;
+    
+    if (!playerUpdates || !Array.isArray(playerUpdates)) {
+      return c.json({ error: "Invalid player updates data" }, 400);
+    }
+
+    console.log(`🔄 Batch updating ${playerUpdates.length} players...`);
+    
+    const players = (await kv.get("players")) || [];
+    
+    // Create a map of player IDs to updates for faster lookup
+    const updateMap = new Map(
+      playerUpdates.map((update: any) => [update.playerId, update.updates])
+    );
+    
+    // Apply all updates
+    const updatedPlayers = players.map((p: any) => {
+      const updates = updateMap.get(p.id);
+      return updates ? { ...p, ...updates } : p;
+    });
+    
+    await kv.set("players", updatedPlayers);
+    
+    console.log(`✅ Successfully batch updated ${playerUpdates.length} players`);
+    return c.json({ success: true, count: playerUpdates.length });
+  } catch (error) {
+    console.error("Error batch updating players:", error);
+    return c.json({ error: "Failed to batch update players", details: String(error) }, 500);
   }
 });
 
@@ -273,7 +471,34 @@ app.put("/make-server-41b22d2d/teams/:id", async (c) => {
   }
 });
 
-// Delete a team
+// Delete all finished teams (MUST be before /:id route)
+app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
+  try {
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = teams.filter((t: any) => t.state !== 'finished');
+    await kv.set("teams", updatedTeams);
+    
+    console.log(`✅ Deleted ${teams.length - updatedTeams.length} finished teams from Supabase`);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting finished teams:", error);
+    return c.json({ error: "Failed to delete finished teams", details: String(error) }, 500);
+  }
+});
+
+// Delete all teams (for session reset)
+app.delete("/make-server-41b22d2d/teams/all", async (c) => {
+  try {
+    await kv.set("teams", []);
+    console.log("✅ Deleted all teams from Supabase");
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting all teams:", error);
+    return c.json({ error: "Failed to delete all teams", details: String(error) }, 500);
+  }
+});
+
+// Delete a team (MUST be after /finished and /all routes)
 app.delete("/make-server-41b22d2d/teams/:id", async (c) => {
   try {
     const teamId = c.req.param("id");
@@ -290,20 +515,6 @@ app.delete("/make-server-41b22d2d/teams/:id", async (c) => {
   } catch (error) {
     console.error("Error deleting team:", error);
     return c.json({ error: "Failed to delete team", details: String(error) }, 500);
-  }
-});
-
-// Delete all finished teams
-app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
-  try {
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = teams.filter((t: any) => t.state !== 'finished');
-    await kv.set("teams", updatedTeams);
-    
-    return c.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting finished teams:", error);
-    return c.json({ error: "Failed to delete finished teams", details: String(error) }, 500);
   }
 });
 

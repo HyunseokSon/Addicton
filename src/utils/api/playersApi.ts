@@ -54,6 +54,22 @@ export const playersApi = {
     }
   },
 
+  async addBatch(players: PlayerData[]): Promise<void> {
+    const response = await fetch(`${API_BASE}/players/batch`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ players }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to batch add players: ${response.statusText} - ${error}`);
+    }
+  },
+
   async update(playerId: string, updates: Partial<PlayerData>): Promise<void> {
     const response = await fetch(`${API_BASE}/players/${playerId}`, {
       method: 'PUT',
@@ -69,18 +85,52 @@ export const playersApi = {
     }
   },
 
+  async updateBatch(playerUpdates: Array<{ playerId: string; updates: Partial<PlayerData> }>): Promise<void> {
+    const response = await fetch(`${API_BASE}/players/batch-update`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ playerUpdates }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to batch update players: ${response.statusText} - ${error}`);
+    }
+  },
+
   async delete(playerId: string): Promise<void> {
     const response = await fetch(`${API_BASE}/players/${playerId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json',
       },
     });
 
     if (!response.ok) {
       throw new Error(`Failed to delete player: ${response.statusText}`);
     }
+  },
+
+  async deleteBatch(playerIds: string[]): Promise<number> {
+    const response = await fetch(`${API_BASE}/players/batch-delete`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ playerIds }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to batch delete players: ${response.statusText} - ${error}`);
+    }
+
+    const result = await response.json();
+    return result.count || 0;
   },
 
   async resetGameCounts(): Promise<void> {

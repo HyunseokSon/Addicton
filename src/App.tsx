@@ -13,22 +13,43 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { RefreshCw, LogOut, KeyRound } from 'lucide-react';
 import addictonLogo from 'figma:asset/3326f21ff08f9b7816589961d903cd0071089100.png';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RoleSelection } from './components/RoleSelection';
 import { PasswordChangeDialog } from './components/PasswordChangeDialog';
+import { LoadingModal } from './components/LoadingModal';
 
 type UserRole = 'admin' | 'member' | null;
 
 export default function App() {
+  // Clear localStorage on app start to force Supabase-only operation
+  useEffect(() => {
+    console.log('🗑️ Clearing all localStorage data...');
+    localStorage.clear();
+    console.log('✅ localStorage cleared - now using Supabase only');
+  }, []);
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [loadingModal, setLoadingModal] = useState<{
+    open: boolean;
+    title: string;
+    description?: string;
+    status: 'loading' | 'success' | 'error';
+    errorMessage?: string;
+  }>({
+    open: false,
+    title: '',
+    status: 'loading',
+  });
   
   const {
     state,
     updateSession,
     addPlayer,
+    updatePlayer,
     deletePlayer,
+    deletePlayers,
     updatePlayerState,
     performAutoMatch,
     startGame,
@@ -46,9 +67,10 @@ export default function App() {
     addMemberAsPlayer,
     addMembersAsPlayers,
     syncFromSupabase,
+    resetMembers,
   } = useGameState();
 
-  const handleAutoMatch = () => {
+  const handleAutoMatch = async () => {
     const eligibleCount = state.players.filter(
       (p) => (p.state === 'waiting' || p.state === 'priority')
     ).length;
@@ -71,16 +93,58 @@ export default function App() {
       return;
     }
 
-    performAutoMatch();
-    
     const newTeamsCount = Math.min(
       maxNewTeams,
       Math.floor(eligibleCount / (state.session?.teamSize || 4))
     );
-    
-    toast.success('팀 매칭 완료', {
-      description: `${newTeamsCount}개 팀이 생성되었습니다.`,
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '팀 매칭 중',
+      description: `${newTeamsCount}개 팀을 생성하고 있습니다...`,
+      status: 'loading',
     });
+
+    try {
+      await performAutoMatch();
+      
+      // Wait a bit for Supabase to process
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '팀 매칭 중',
+        description: '매칭이 완료되었습니다. 데이터를 새로고침합니다...',
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '팀 매칭 완료',
+        description: `${newTeamsCount}개 팀이 생성되었습니다.`,
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Auto match failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '팀 매칭 실패',
+        status: 'error',
+        errorMessage: '매칭 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
   const handleStartGame = (teamId: string, courtId?: string) => {
@@ -98,8 +162,10 @@ export default function App() {
     });
   };
 
-  const handleStartAllQueuedGames = () => {
+  const handleStartAllQueuedGames = async () => {
     const availableCourts = state.courts.filter((c) => c.status === 'available');
+    const queuedTeams = state.teams.filter((t) => t.state === 'queued');
+    
     if (availableCourts.length === 0) {
       toast.error('코트 부족', {
         description: '사용 가능한 코트가 없습니다.',
@@ -107,59 +173,194 @@ export default function App() {
       return;
     }
 
-    startAllQueuedGames();
-    toast.success('모든 게임 시작', {
-      description: '대기중인 모든 팀의 타이머가 시작되었습니다.',
+    const teamsToStart = Math.min(queuedTeams.length, availableCourts.length);
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '게임 일괄 시작 중',
+      description: `${teamsToStart}개 팀의 게임을 시작하고 있습니다...`,
+      status: 'loading',
     });
+
+    try {
+      await startAllQueuedGames();
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '게임 일괄 시작 중',
+        description: '게임이 시작되었습니다. 데이터를 새로고침합니다...',
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '게임 시작 완료',
+        description: `${teamsToStart}개 팀의 게임이 시작되었습니다.`,
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Start all games failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '게임 시작 실패',
+        status: 'error',
+        errorMessage: '게임 시작 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
-  const handleEndGame = (courtId: string) => {
-    endGame(courtId);
-    toast.success('게임 종료', {
-      description: '참가자들이 대기 상태로 전환되습니다.',
+  const handleEndGame = async (courtId: string) => {
+    const court = state.courts.find((c) => c.id === courtId);
+    if (!court || !court.currentTeamId) return;
+
+    const team = state.teams.find((t) => t.id === court.currentTeamId);
+    if (!team) return;
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '게임 종료 중',
+      description: '게임을 종료하고 참가자들을 대기 상태로 전환하고 있습니다...',
+      status: 'loading',
     });
+
+    try {
+      await endGame(courtId);
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '게임 종료 중',
+        description: '게임이 종료되었습니다. 데이터를 새로고침합니다...',
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '게임 종료 완료',
+        description: '참가자들이 대기 상태로 전환되었습니다.',
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('End game failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '게임 종료 실패',
+        status: 'error',
+        errorMessage: '게임 종료 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
-  const handleSwapPlayer = (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
+  const handleSwapPlayer = async (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
     const team = state.teams.find((t) => t.id === teamId);
     if (!team) return;
 
-    // Update team's player list
-    const newPlayerIds = team.playerIds.map((id) =>
-      id === queuedPlayerId ? waitingPlayerId : id
-    );
-    updateTeam(teamId, newPlayerIds);
+    const waitingPlayer = state.players.find((p) => p.id === waitingPlayerId);
+    const queuedPlayer = state.players.find((p) => p.id === queuedPlayerId);
+    if (!waitingPlayer || !queuedPlayer) return;
 
-    // Update player states
-    updatePlayer(waitingPlayerId, { state: 'queued' });
-    updatePlayer(queuedPlayerId, { state: 'waiting' });
-
-    toast.success('참가자 교체 완료', {
-      description: '대기중인 참가자와 게임 대기 참가자가 교체되었습니다.',
+    console.log('🔄 Starting player swap:', {
+      waiting: { id: waitingPlayerId, name: waitingPlayer.name, currentState: waitingPlayer.state },
+      queued: { id: queuedPlayerId, name: queuedPlayer.name, currentState: queuedPlayer.state },
+      team: teamId
     });
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '참가자 교체 중',
+      description: `${waitingPlayer.name}님과 ${queuedPlayer.name}님을 교체하고 있습니다...`,
+      status: 'loading',
+    });
+
+    try {
+      // Update team's player list
+      const newPlayerIds = team.playerIds.map((id) =>
+        id === queuedPlayerId ? waitingPlayerId : id
+      );
+      await updateTeam(teamId, newPlayerIds);
+      console.log('✅ Team updated with new player IDs:', newPlayerIds);
+
+      // Update player states
+      console.log(`📤 Updating ${waitingPlayer.name} to queued state...`);
+      await updatePlayer(waitingPlayerId, { state: 'queued' });
+      console.log(`📤 Updating ${queuedPlayer.name} to waiting state...`);
+      await updatePlayer(queuedPlayerId, { state: 'waiting' });
+      console.log('✅ Player states updated in Supabase');
+
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '참가자 교체 중',
+        description: '교체가 완료되었습니다. 데이터를 새로고침합니다...',
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '참가자 교체 완료',
+        description: `${waitingPlayer.name}님과 ${queuedPlayer.name}님이 교체되었습니다.`,
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Swap player failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '참가자 교체 실패',
+        status: 'error',
+        errorMessage: '교체 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
-  const handleSwapBetweenTeams = (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => {
-    const sourceTeam = state.teams.find((t) => t.id === sourceTeamId);
-    const targetTeam = state.teams.find((t) => t.id === targetTeamId);
-    
-    if (!sourceTeam || !targetTeam) return;
+  const handleSwapBetweenTeams = (dragTeamId: string, dragPlayerId: string, dropTeamId: string) => {
+    const dragTeam = state.teams.find((t) => t.id === dragTeamId);
+    const dropTeam = state.teams.find((t) => t.id === dropTeamId);
+    if (!dragTeam || !dropTeam) return;
 
-    // Update source team's player list
-    const newSourcePlayerIds = sourceTeam.playerIds.map((id) =>
-      id === sourcePlayerId ? targetPlayerId : id
-    );
-    updateTeam(sourceTeamId, newSourcePlayerIds);
+    const dragPlayerIndex = dragTeam.playerIds.indexOf(dragPlayerId);
+    const dropPlayerId = dropTeam.playerIds[dragPlayerIndex];
 
-    // Update target team's player list
-    const newTargetPlayerIds = targetTeam.playerIds.map((id) =>
-      id === targetPlayerId ? sourcePlayerId : id
-    );
-    updateTeam(targetTeamId, newTargetPlayerIds);
+    const newDragPlayerIds = [...dragTeam.playerIds];
+    const newDropPlayerIds = [...dropTeam.playerIds];
+    newDragPlayerIds[dragPlayerIndex] = dropPlayerId;
+    newDropPlayerIds[dragPlayerIndex] = dragPlayerId;
 
-    toast.success('팀 간 참가자 교체 완료', {
-      description: '두 팀의 참가자가 교체되었습니다.',
-    });
+    updateTeam(dragTeamId, newDragPlayerIds);
+    updateTeam(dropTeamId, newDropPlayerIds);
   };
 
   const handleReturnToWaiting = (playerId: string, teamId: string) => {
@@ -194,14 +395,52 @@ export default function App() {
       return;
     }
 
-    // Delete all waiting players asynchronously
-    await Promise.all(
-      waitingPlayers.map((player) => deletePlayer(player.id))
-    );
-
-    toast.success('전체 삭제 완료', {
-      description: `${waitingPlayers.length}명의 참가자가 삭제되었습니다.`,
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '참가자 삭제 중',
+      description: `${waitingPlayers.length}명의 참가자를 삭제하고 있습니다...`,
+      status: 'loading',
     });
+
+    try {
+      // Use batch delete API
+      const playerIds = waitingPlayers.map((p) => p.id);
+      const deletedCount = await deletePlayers(playerIds);
+      
+      // Show success and sync data
+      setLoadingModal({
+        open: true,
+        title: '참가자 삭제 중',
+        description: `${deletedCount}명의 참가자가 삭제되었습니다. 데이터를 새로고침합니다...`,
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '전체 삭제 완료',
+        description: `${deletedCount}명의 참가자가 삭제되었습니다.`,
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Batch delete failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '삭제 실패',
+        status: 'error',
+        errorMessage: '삭제 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
   const handleSyncFromSupabase = async () => {
@@ -211,6 +450,53 @@ export default function App() {
     toast.success('동기화 완료', {
       description: 'Supabase에서 최신 데이터를 가져왔습니다.',
     });
+  };
+
+  const handleResetSession = async () => {
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '초기화 중',
+      description: '진행중인 게임을 종료하고 모든 데이터를 초기화하고 있습니다...',
+      status: 'loading',
+    });
+
+    try {
+      await resetSession();
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '초기화 중',
+        description: '초기화가 완료되었습니다. 데이터를 새로고침합니다...',
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '초기화 완료',
+        description: '모든 게임과 팀이 초기화되었습니다.',
+        status: 'success',
+      });
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Reset session failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '초기화 실패',
+        status: 'error',
+        errorMessage: '초기화 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
   if (!state.session) {
@@ -279,7 +565,7 @@ export default function App() {
                       🎯 팀 매칭
                     </button>
                     <button
-                      onClick={resetSession}
+                      onClick={handleResetSession}
                       className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation"
                     >
                       초기화
@@ -391,6 +677,9 @@ export default function App() {
                       onDeleteMember={deleteMember}
                       onAddMemberAsPlayer={addMemberAsPlayer}
                       addMembersAsPlayers={addMembersAsPlayers}
+                      syncFromSupabase={syncFromSupabase}
+                      resetMembers={resetMembers}
+                      setLoadingModal={setLoadingModal}
                       readOnly={!isAdmin}
                     />
                   </TabsContent>
@@ -433,6 +722,14 @@ export default function App() {
         <PasswordChangeDialog
           open={showPasswordChange}
           onOpenChange={setShowPasswordChange}
+        />
+        <LoadingModal
+          open={loadingModal.open}
+          title={loadingModal.title}
+          description={loadingModal.description}
+          status={loadingModal.status}
+          errorMessage={loadingModal.errorMessage}
+          onClose={() => setLoadingModal(prev => ({ ...prev, open: false }))}
         />
       </div>
     </DndProvider>

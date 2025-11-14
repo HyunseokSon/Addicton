@@ -108,4 +108,18 @@ export const teamsApi = {
       throw new Error(`Failed to delete finished teams: ${response.statusText}`);
     }
   },
+
+  async deleteAll(): Promise<void> {
+    const response = await fetch(`${API_BASE}/teams/all`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete all teams: ${response.statusText}`);
+    }
+  },
 };

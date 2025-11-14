@@ -6,8 +6,6 @@ import { membersApi } from '../utils/api/membersApi';
 import { playersApi } from '../utils/api/playersApi';
 import { teamsApi } from '../utils/api/teamsApi';
 
-const STORAGE_KEY = 'addiction-game-matching-state';
-
 function createInitialCourts(count: number): Court[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `court-${i}`,
@@ -22,124 +20,7 @@ function createInitialCourts(count: number): Court[] {
 
 export function useGameState() {
   const [state, setState] = useState<AppState>(() => {
-    console.log('🔍 Initializing state, checking localStorage...');
-    const saved = localStorage.getItem(STORAGE_KEY);
-    console.log('📦 localStorage raw data:', saved ? `Found (${saved.length} chars)` : 'NULL or EMPTY');
-    
-    // Get initial members data
-    const initialMembers = createInitialMembers();
-    
-    if (saved) {
-      try {
-        console.log('📂 Loading state from localStorage...');
-        const parsed = JSON.parse(saved);
-        // Parse dates
-        if (parsed.session) {
-          parsed.session.createdAt = new Date(parsed.session.createdAt);
-          // Ensure teamSize is at least 4
-          if (!parsed.session.teamSize || parsed.session.teamSize < 4) {
-            parsed.session.teamSize = 4;
-          }
-        }
-        
-        // Ensure players array exists
-        if (!parsed.players || !Array.isArray(parsed.players)) {
-          console.warn('⚠️ Players array missing or invalid, initializing empty array');
-          parsed.players = [];
-        }
-        
-        parsed.players = parsed.players.map((p: any) => ({
-          ...p,
-          createdAt: new Date(p.createdAt),
-          lastGameEndAt: p.lastGameEndAt ? new Date(p.lastGameEndAt) : null,
-        }));
-        
-        // Ensure teams array exists
-        if (!parsed.teams || !Array.isArray(parsed.teams)) {
-          console.warn('⚠️ Teams array missing or invalid, initializing empty array');
-          parsed.teams = [];
-        }
-        
-        parsed.teams = parsed.teams.map((t: any) => ({
-          ...t,
-          startedAt: t.startedAt ? new Date(t.startedAt) : null,
-          endedAt: t.endedAt ? new Date(t.endedAt) : null,
-        }));
-        
-        // Ensure auditLogs array exists
-        if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
-          parsed.auditLogs = [];
-        }
-        
-        parsed.auditLogs = parsed.auditLogs.map((l: any) => ({
-          ...l,
-          timestamp: new Date(l.timestamp),
-        }));
-        
-        // Deduplicate courts - ensure unique IDs
-        const seenCourtIds = new Set<string>();
-        const uniqueCourts: Court[] = [];
-        
-        if (parsed.courts && Array.isArray(parsed.courts)) {
-          parsed.courts.forEach((court: Court, index: number) => {
-            if (!seenCourtIds.has(court.id)) {
-              seenCourtIds.add(court.id);
-              uniqueCourts.push(court);
-            }
-          });
-          
-          // If we have fewer unique courts than expected, recreate them
-          if (parsed.session && uniqueCourts.length < parsed.session.courtsCount) {
-            parsed.courts = createInitialCourts(parsed.session.courtsCount);
-          } else {
-            parsed.courts = uniqueCourts;
-          }
-        } else {
-          // If courts are missing, recreate them
-          parsed.courts = parsed.session ? createInitialCourts(parsed.session.courtsCount) : createInitialCourts(4);
-        }
-        
-        // Parse members
-        if (parsed.members && Array.isArray(parsed.members)) {
-          parsed.members = parsed.members.map((m: any) => ({
-            ...m,
-            createdAt: new Date(m.createdAt),
-          }));
-          console.log('✅ Using members from localStorage:', parsed.members.length);
-        } else {
-          parsed.members = initialMembers;
-          console.log('✅ Using initial members (localStorage had no members):', initialMembers.length);
-        }
-        
-        console.log('✅ State loaded from localStorage:', {
-          players: parsed.players.length,
-          members: parsed.members.length,
-          teams: parsed.teams.length,
-        });
-        
-        return parsed;
-      } catch (error) {
-        console.error('🚨 Error loading state from localStorage:', error);
-        // Fallback to default state
-        return {
-          session: {
-            id: `session-${Date.now()}`,
-            name: '에딕턴 게임 매칭',
-            date: new Date().toISOString().split('T')[0],
-            courtsCount: 4,
-            teamSize: 4,
-            gameDurationMin: 15,
-            autoSeatNext: true,
-            createdAt: new Date(),
-          },
-          members: initialMembers,
-          players: [],
-          teams: [],
-          courts: createInitialCourts(4),
-          auditLogs: [],
-        };
-      }
-    }
+    console.log('🔍 Initializing state from Supabase only...');
     
     // Create default session
     const defaultSession: Session = {
@@ -153,9 +34,10 @@ export function useGameState() {
       createdAt: new Date(),
     };
     
+    // Start with empty state - will be populated from Supabase
     return {
       session: defaultSession,
-      members: initialMembers,
+      members: [],
       players: [],
       teams: [],
       courts: createInitialCourts(4),
@@ -163,133 +45,82 @@ export function useGameState() {
     };
   });
 
-  // Save to localStorage
+  // Load ALL data from Supabase on initial mount
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    // Debug: log player count on save
-    console.log('💾 State saved to localStorage:', {
-      players: state.players.length,
-      members: state.members.length,
-      teams: state.teams.length,
-    });
-  }, [state]);
-
-  // Load members from Supabase on initial mount
-  useEffect(() => {
-    const loadMembersFromSupabase = async () => {
+    const loadFromSupabase = async () => {
       try {
-        console.log('🔄 Loading members from Supabase...');
+        console.log('🔄 Loading all data from Supabase...');
+        
+        // Load members
         const membersFromDb = await membersApi.getAll();
         
-        if (membersFromDb && membersFromDb.length > 0) {
-          console.log('✅ Loaded members from Supabase:', membersFromDb.length);
-          setState((prev) => ({
-            ...prev,
-            members: membersFromDb,
-          }));
-        } else {
-          console.log('ℹ️ No members found in Supabase, using local data');
-        }
-      } catch (error) {
-        console.error('⚠️ Failed to load members from Supabase:', error);
-        // Continue using local/initial members
-      }
-    };
-
-    const loadPlayersFromSupabase = async () => {
-      try {
-        console.log('🔄 Loading players from Supabase...');
+        // Load players
         const playersFromDb = await playersApi.getAll();
         
-        if (playersFromDb && playersFromDb.length > 0) {
-          console.log('✅ Loaded players from Supabase:', playersFromDb.length);
-          setState((prev) => ({
-            ...prev,
-            players: playersFromDb,
-          }));
-        } else {
-          console.log('ℹ️ No players found in Supabase');
-        }
-      } catch (error) {
-        console.error('⚠️ Failed to load players from Supabase:', error);
-        // Continue using local players
-      }
-    };
-
-    loadMembersFromSupabase();
-    loadPlayersFromSupabase();
-  }, []); // Run only once on mount
-
-  // Load teams from Supabase on initial mount
-  useEffect(() => {
-    const loadTeamsFromSupabase = async () => {
-      try {
-        console.log('🔄 Loading teams from Supabase...');
+        // Load teams
         const teamsFromDb = await teamsApi.getAll();
-        
-        // Only load queued and playing teams (not finished)
         const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
         
-        if (activeTeams.length > 0) {
-          console.log('✅ Loaded teams from Supabase:', activeTeams.length);
-          setState((prev) => {
-            // Restore courts based on playing teams
-            const restoredCourts = prev.courts.map(court => {
-              // Find if any team is playing on this court
-              const playingTeam = activeTeams.find(
-                t => t.state === 'playing' && t.assignedCourtId === court.id
-              );
-              
-              if (playingTeam) {
-                return {
-                  ...court,
-                  status: 'occupied' as const,
-                  currentTeamId: playingTeam.id,
-                  timerMs: 0, // Not used anymore, timer calculated from startedAt
-                  isPaused: false,
-                };
-              }
-              
+        setState((prev) => {
+          // Restore courts based on playing teams
+          const restoredCourts = prev.courts.map(court => {
+            const playingTeam = activeTeams.find(
+              t => t.state === 'playing' && t.assignedCourtId === court.id
+            );
+            
+            if (playingTeam) {
               return {
                 ...court,
-                status: 'available' as const,
-                currentTeamId: null,
+                status: 'occupied' as const,
+                currentTeamId: playingTeam.id,
                 timerMs: 0,
                 isPaused: false,
               };
-            });
-            
-            // Update player states based on teams
-            const teamPlayerIds = new Set(activeTeams.flatMap(t => t.playerIds));
-            const restoredPlayers = prev.players.map(player => {
-              if (!teamPlayerIds.has(player.id)) return player;
-              
-              const playerTeam = activeTeams.find(t => t.playerIds.includes(player.id));
-              if (!playerTeam) return player;
-              
-              return {
-                ...player,
-                state: playerTeam.state === 'playing' ? 'playing' as const : 'queued' as const,
-              };
-            });
+            }
             
             return {
-              ...prev,
-              teams: activeTeams,
-              courts: restoredCourts,
-              players: restoredPlayers,
+              ...court,
+              status: 'available' as const,
+              currentTeamId: null,
+              timerMs: 0,
+              isPaused: false,
             };
           });
-        } else {
-          console.log('ℹ️ No active teams found in Supabase');
-        }
+          
+          // Update player states based on teams
+          const teamPlayerIds = new Set(activeTeams.flatMap(t => t.playerIds));
+          const restoredPlayers = playersFromDb.map(player => {
+            if (!teamPlayerIds.has(player.id)) return player;
+            
+            const playerTeam = activeTeams.find(t => t.playerIds.includes(player.id));
+            if (!playerTeam) return player;
+            
+            return {
+              ...player,
+              state: playerTeam.state === 'playing' ? 'playing' as const : 'queued' as const,
+            };
+          });
+          
+          console.log('✅ Data loaded from Supabase:', {
+            members: membersFromDb.length,
+            players: playersFromDb.length,
+            teams: activeTeams.length,
+          });
+          
+          return {
+            ...prev,
+            members: membersFromDb,
+            players: restoredPlayers,
+            teams: activeTeams,
+            courts: restoredCourts,
+          };
+        });
       } catch (error) {
-        console.error('⚠️ Failed to load teams from Supabase:', error);
-        // Continue using local teams
+        console.error('⚠️ Failed to load data from Supabase:', error);
       }
     };
 
-    loadTeamsFromSupabase();
+    loadFromSupabase();
   }, []); // Run only once on mount
 
   const addAuditLog = useCallback((type: string, payload: any) => {
@@ -476,7 +307,44 @@ export function useGameState() {
           playerIds: t.playerIds.filter((id) => id !== playerId),
         })),
       }));
-      addAuditLog('player_deleted', { playerId });
+      addAuditLog('player_deleted', { playerId, error: String(error) });
+    }
+  }, [addAuditLog]);
+
+  const deletePlayers = useCallback(async (playerIds: string[]) => {
+    try {
+      console.log(`📤 Batch deleting ${playerIds.length} players from Supabase`);
+      
+      // Batch delete from Supabase first
+      const deletedCount = await playersApi.deleteBatch(playerIds);
+      
+      console.log(`✅ Batch deleted ${deletedCount} players from Supabase`);
+      
+      // Update local state
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => !playerIds.includes(p.id)),
+        teams: prev.teams.map((t) => ({
+          ...t,
+          playerIds: t.playerIds.filter((id) => !playerIds.includes(id)),
+        })),
+      }));
+      
+      addAuditLog('players_batch_deleted', { count: deletedCount });
+      return deletedCount;
+    } catch (error) {
+      console.error('❌ Failed to batch delete players from Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => !playerIds.includes(p.id)),
+        teams: prev.teams.map((t) => ({
+          ...t,
+          playerIds: t.playerIds.filter((id) => !playerIds.includes(id)),
+        })),
+      }));
+      addAuditLog('players_batch_deleted', { count: 0, error: String(error) });
+      throw error;
     }
   }, [addAuditLog]);
 
@@ -492,32 +360,83 @@ export function useGameState() {
 
   const performAutoMatch = useCallback(async () => {
     try {
-      const newTeamsToCreate: Team[] = [];
-      const playersToUpdate: string[] = [];
+      // First, calculate what teams to create OUTSIDE of setState
+      let newTeamsToCreate: Team[] = [];
+      let playersToUpdate: string[] = [];
       
+      // Get current state to calculate teams
+      const currentState = state;
+      
+      if (!currentState.session) {
+        console.log('⚠️ No session found');
+        return;
+      }
+      
+      console.log('🎯 Auto Match Started');
+      console.log('  Total players:', currentState.players.length);
+      console.log('  Player states:', currentState.players.reduce((acc, p) => {
+        acc[p.state] = (acc[p.state] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>));
+      
+      // Calculate max teams based on total courts AND current queued teams
+      const totalCourts = currentState.session.courtsCount;
+      const currentQueuedTeams = currentState.teams.filter(t => t.state === 'queued').length;
+      const playingTeams = currentState.teams.filter(t => t.state === 'playing').length;
+      
+      console.log('  Total courts:', totalCourts);
+      console.log('  Queued teams:', currentQueuedTeams);
+      console.log('  Playing teams:', playingTeams);
+      
+      // Allow creating more teams than courts (for queue system)
+      // But limit to avoid creating too many teams at once
+      const maxNewTeams = Math.max(0, (totalCourts * 2) - currentQueuedTeams);
+      
+      console.log('  Max new teams to create:', maxNewTeams);
+      
+      // If no room for new teams, don't create any
+      if (maxNewTeams === 0) {
+        console.log('  ⚠️ No room for new teams');
+        return;
+      }
+      
+      const { teams: newTeams } = autoMatch(currentState.players, currentState.session.teamSize, maxNewTeams);
+      
+      console.log('  ✅ Created', newTeams.length, 'new teams');
+      console.log('  Teams:', newTeams.map((t, i) => ({
+        team: i + 1,
+        players: t.playerIds.length,
+        playerNames: currentState.players.filter(p => t.playerIds.includes(p.id)).map(p => p.name)
+      })));
+      
+      // Store teams to be created
+      newTeamsToCreate = newTeams;
+      playersToUpdate = newTeams.flatMap((t) => t.playerIds);
+      
+      // Save new teams to Supabase FIRST
+      if (newTeamsToCreate.length > 0) {
+        console.log(`📤 Saving ${newTeamsToCreate.length} teams to Supabase...`);
+        await teamsApi.addBatch(newTeamsToCreate);
+        console.log(`✅ Saved ${newTeamsToCreate.length} teams to Supabase`);
+      }
+      
+      // Update player states in Supabase using BATCH UPDATE
+      if (playersToUpdate.length > 0) {
+        console.log(`📤 Batch updating ${playersToUpdate.length} players to queued state...`);
+        const playerUpdates = playersToUpdate.map((playerId) => ({
+          playerId,
+          updates: { state: 'queued' as const }
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Batch updated ${playersToUpdate.length} players to queued state in Supabase`);
+      }
+      
+      // NOW update local state
       setState((prev) => {
-        if (!prev.session) return prev;
-        
-        // Calculate max teams based on total courts AND current queued teams
-        const totalCourts = prev.session.courtsCount;
-        const currentQueuedTeams = prev.teams.filter(t => t.state === 'queued').length;
-        const maxNewTeams = Math.max(0, totalCourts - currentQueuedTeams);
-        
-        // If no room for new teams, don't create any
-        if (maxNewTeams === 0) {
-          return prev;
-        }
-        
-        const { teams: newTeams } = autoMatch(prev.players, prev.session.teamSize, maxNewTeams);
-        
-        // Store teams to be created in Supabase
-        newTeamsToCreate.push(...newTeams);
-        
         // Update player states to 'queued'
-        const queuedPlayerIds = new Set(newTeams.flatMap((t) => t.playerIds));
+        const queuedPlayerIds = new Set(playersToUpdate);
         const updatedPlayers = prev.players.map((p) => {
           if (queuedPlayerIds.has(p.id)) {
-            playersToUpdate.push(p.id);
             return { ...p, state: 'queued' as const };
           }
           return p;
@@ -526,32 +445,17 @@ export function useGameState() {
         return {
           ...prev,
           players: updatedPlayers,
-          teams: [...prev.teams, ...newTeams],
+          teams: [...prev.teams, ...newTeamsToCreate],
         };
       });
       
-      // Save new teams to Supabase
-      if (newTeamsToCreate.length > 0) {
-        await teamsApi.addBatch(newTeamsToCreate);
-        console.log(`✅ Created ${newTeamsToCreate.length} teams in Supabase`);
-      }
-      
-      // Update player states in Supabase
-      if (playersToUpdate.length > 0) {
-        await Promise.all(
-          playersToUpdate.map((playerId) => 
-            playersApi.update(playerId, { state: 'queued' })
-          )
-        );
-        console.log(`✅ Updated ${playersToUpdate.length} players to queued state in Supabase`);
-      }
-      
       addAuditLog('auto_match_performed', {});
     } catch (error) {
-      console.error('Failed to save teams to Supabase:', error);
-      addAuditLog('auto_match_performed', {});
+      console.error('❌ Failed to perform auto match:', error);
+      addAuditLog('auto_match_performed', { error: String(error) });
+      throw error;
     }
-  }, [addAuditLog]);
+  }, [addAuditLog, state]);
 
   const startGame = useCallback(async (teamId: string, courtId?: string) => {
     try {
@@ -622,31 +526,41 @@ export function useGameState() {
   }, [addAuditLog, state.courts]);
 
   const startAllQueuedGames = useCallback(async () => {
+    console.log('🎮 startAllQueuedGames called');
+    
+    // Get current state to determine what needs to be updated
+    const queuedTeams = state.teams.filter((t) => t.state === 'queued');
+    const availableCourts = state.courts.filter((c) => c.status === 'available');
+    
+    console.log(`Found ${queuedTeams.length} queued teams and ${availableCourts.length} available courts`);
+    
+    if (queuedTeams.length === 0 || availableCourts.length === 0) {
+      console.log('No teams or courts available, returning');
+      return 0;
+    }
+    
+    // Match teams to courts
+    const teamsToStart = queuedTeams.slice(0, availableCourts.length);
+    const teamsToUpdate: { teamId: string; courtId: string }[] = [];
+    const playersToUpdate: string[] = [];
+    
+    teamsToStart.forEach((team, index) => {
+      const court = availableCourts[index];
+      teamsToUpdate.push({ teamId: team.id, courtId: court.id });
+      playersToUpdate.push(...team.playerIds);
+    });
+    
+    console.log(`Prepared to start ${teamsToUpdate.length} teams`);
+    
     try {
-      const teamsToUpdate: { teamId: string; courtId: string }[] = [];
-      const playersToUpdate: string[] = [];
-      
+      // Update local state first
       setState((prev) => {
-        const queuedTeams = prev.teams.filter((t) => t.state === 'queued');
-        const availableCourts = prev.courts.filter((c) => c.status === 'available');
-        
-        if (queuedTeams.length === 0 || availableCourts.length === 0) {
-          return prev;
-        }
-        
-        // Match teams to courts (up to the number of available courts)
-        const teamsToStart = queuedTeams.slice(0, availableCourts.length);
-        
         let updatedTeams = [...prev.teams];
         let updatedCourts = [...prev.courts];
         let updatedPlayers = [...prev.players];
         
         teamsToStart.forEach((team, index) => {
           const court = availableCourts[index];
-          
-          // Track for Supabase update
-          teamsToUpdate.push({ teamId: team.id, courtId: court.id });
-          playersToUpdate.push(...team.playerIds);
           
           // Update team
           updatedTeams = updatedTeams.map((t) =>
@@ -676,8 +590,11 @@ export function useGameState() {
         };
       });
       
+      console.log('✅ Local state updated');
+      
       // Batch update teams in Supabase
       if (teamsToUpdate.length > 0) {
+        console.log(`🔄 Updating ${teamsToUpdate.length} teams in Supabase...`);
         await Promise.all(
           teamsToUpdate.map(({ teamId, courtId }) =>
             teamsApi.update(teamId, {
@@ -707,104 +624,118 @@ export function useGameState() {
       console.error('Failed to batch start games:', error);
       return 0;
     }
-  }, [addAuditLog]);
+  }, [addAuditLog, state.teams, state.courts]);
 
   const endGame = useCallback(async (courtId: string) => {
-    const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
-    let teamToDelete: string | null = null;
+    console.log('🎮 endGame called for courtId:', courtId);
     
-    setState((prev) => {
-      const court = prev.courts.find((c) => c.id === courtId);
-      if (!court || !court.currentTeamId) return prev;
-      
-      const team = prev.teams.find((t) => t.id === court.currentTeamId);
-      if (!team) return prev;
-      
-      // Store team ID to delete from Supabase
-      teamToDelete = team.id;
-      
-      const now = new Date();
-      
-      const updatedPlayers = prev.players.map((p) => {
-        if (team.playerIds.includes(p.id)) {
-          // Track recent teammates (keep last game's teammates)
-          const teammates = team.playerIds.filter(id => id !== p.id);
-          
-          // Update teammate history
-          const teammateHistory = { ...(p.teammateHistory || {}) };
-          for (const teammateId of teammates) {
-            teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
-          }
-          
-          const playerUpdates = {
-            state: 'waiting' as const,
-            gameCount: p.gameCount + 1,
-            lastGameEndAt: now,
-            recentTeammates: teammates,
-            teammateHistory,
-          };
-          
-          // Store player updates to sync with Supabase (including state change)
-          playersToUpdate.push({
-            id: p.id,
-            updates: {
-              state: 'waiting',
-              gameCount: p.gameCount + 1,
-              lastGameEndAt: now,
-              teammateHistory,
-            },
-          });
-          
-          return {
-            ...p,
-            ...playerUpdates,
-          };
+    // Get current state to find team and players
+    const court = state.courts.find((c) => c.id === courtId);
+    if (!court || !court.currentTeamId) {
+      console.log('❌ Court not found or no team:', { court, courtId });
+      return;
+    }
+    
+    const team = state.teams.find((t) => t.id === court.currentTeamId);
+    if (!team) {
+      console.log('❌ Team not found:', court.currentTeamId);
+      return;
+    }
+    
+    console.log(`✅ Found team ${team.id} with ${team.playerIds.length} players`);
+    
+    const teamToDelete = team.id;
+    const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
+    const now = new Date();
+    
+    // Prepare player updates
+    team.playerIds.forEach(playerId => {
+      const player = state.players.find(p => p.id === playerId);
+      if (player) {
+        const teammates = team.playerIds.filter(id => id !== playerId);
+        const teammateHistory = { ...(player.teammateHistory || {}) };
+        
+        for (const teammateId of teammates) {
+          teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
         }
-        return p;
-      });
-      
-      // Remove finished team from teams array
-      const updatedTeams = prev.teams.filter((t) => t.id !== team.id);
-      
-      const updatedCourts = prev.courts.map((c) =>
-        c.id === courtId
-          ? { ...c, status: 'available' as const, currentTeamId: null, timerMs: 0, isPaused: false }
-          : c
-      );
-      
-      // Auto-update priority status
-      const priorityUpdatedPlayers = updatePriorityStatus(updatedPlayers);
-      
-      return {
-        ...prev,
-        players: priorityUpdatedPlayers,
-        teams: updatedTeams,
-        courts: updatedCourts,
-      };
+        
+        playersToUpdate.push({
+          id: playerId,
+          updates: {
+            state: 'waiting',
+            gameCount: player.gameCount + 1,
+            lastGameEndAt: now,
+            teammateHistory,
+          },
+        });
+      }
     });
     
-    // Delete team from Supabase
-    if (teamToDelete) {
-      try {
-        await teamsApi.delete(teamToDelete);
-        console.log(`✅ Deleted team ${teamToDelete} from Supabase`);
-      } catch (error) {
-        console.error('Failed to delete team from Supabase:', error);
-      }
-    }
+    console.log(`🔄 Prepared to update ${playersToUpdate.length} players, delete team ${teamToDelete}`);
     
-    // Update all players' game counts, state, and teammate history in Supabase
     try {
-      for (const { id, updates } of playersToUpdate) {
-        await playersApi.update(id, updates);
+      // Update local state first
+      setState((prev) => {
+        const updatedPlayers = prev.players.map((p) => {
+          const update = playersToUpdate.find(u => u.id === p.id);
+          if (update) {
+            const teammates = team.playerIds.filter(id => id !== p.id);
+            return {
+              ...p,
+              state: 'waiting' as const,
+              gameCount: p.gameCount + 1,
+              lastGameEndAt: now,
+              recentTeammates: teammates,
+              teammateHistory: update.updates.teammateHistory,
+            };
+          }
+          return p;
+        });
+        
+        // Auto-update priority status
+        const priorityUpdatedPlayers = updatePriorityStatus(updatedPlayers);
+        
+        // Remove finished team from teams array
+        const updatedTeams = prev.teams.filter((t) => t.id !== teamToDelete);
+        
+        const updatedCourts = prev.courts.map((c) =>
+          c.id === courtId
+            ? { ...c, status: 'available' as const, currentTeamId: null, timerMs: 0, isPaused: false }
+            : c
+        );
+        
+        return {
+          ...prev,
+          players: priorityUpdatedPlayers,
+          teams: updatedTeams,
+          courts: updatedCourts,
+        };
+      });
+      
+      console.log('✅ Local state updated, now syncing to Supabase...');
+      
+      // Delete team from Supabase
+      await teamsApi.delete(teamToDelete);
+      console.log(`✅ Deleted team ${teamToDelete} from Supabase`);
+      
+      // Update all players' game counts, state, and teammate history in Supabase using BATCH UPDATE
+      if (playersToUpdate.length > 0) {
+        console.log(`📤 Batch updating ${playersToUpdate.length} players' game data and state in Supabase...`);
+        const playerUpdates = playersToUpdate.map(({ id, updates }) => ({
+          playerId: id,
+          updates: updates,
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Batch updated ${playersToUpdate.length} players' game data and state in Supabase`);
       }
-      console.log(`✅ Updated ${playersToUpdate.length} players' game data and state in Supabase`);
+      
+      addAuditLog('game_ended', { courtId });
+      console.log('✅ endGame completed');
     } catch (error) {
-      console.error('Failed to update players in Supabase:', error);
+      console.error('❌ Failed to end game:', error);
+      throw error;
     }
-    
-    addAuditLog('game_ended', { courtId });
-  }, [addAuditLog]);
+  }, [addAuditLog, state.courts, state.teams, state.players]);
 
   const toggleCourtPause = useCallback((courtId: string) => {
     setState((prev) => ({
@@ -858,12 +789,13 @@ export function useGameState() {
 
   const deleteTeam = useCallback(async (teamId: string) => {
     try {
-      // Delete from Supabase first
-      await teamsApi.delete(teamId);
+      let playersToUpdate: string[] = [];
       
       setState((prev) => {
         const team = prev.teams.find((t) => t.id === teamId);
         if (!team) return prev;
+        
+        playersToUpdate = team.playerIds;
         
         const updatedPlayers = prev.players.map((p) =>
           team.playerIds.includes(p.id) ? { ...p, state: 'waiting' as const } : p
@@ -875,7 +807,18 @@ export function useGameState() {
           players: updatedPlayers,
         };
       });
-      console.log(`✅ Deleted team ${teamId} from Supabase`);
+      
+      // Delete team from Supabase
+      await teamsApi.delete(teamId);
+      
+      // Update all affected players in Supabase
+      await Promise.all(
+        playersToUpdate.map(playerId => 
+          playersApi.update(playerId, { state: 'waiting' })
+        )
+      );
+      
+      console.log(`✅ Deleted team ${teamId} and updated ${playersToUpdate.length} players in Supabase`);
       addAuditLog('team_deleted', { teamId });
     } catch (error) {
       console.error('Failed to delete team from Supabase:', error);
@@ -925,47 +868,80 @@ export function useGameState() {
   }, [addAuditLog]);
 
   const resetSession = useCallback(async () => {
+    console.log('🔄 Starting session reset...');
+    
     try {
-      // Reset game counts in Supabase
-      await playersApi.resetGameCounts();
+      // 1. Get all playing teams to end their games
+      const playingTeams = state.teams.filter((t) => t.state === 'playing');
+      console.log(`Found ${playingTeams.length} playing teams to end`);
       
-      // Update local state
-      setState((prev) => ({
-        ...prev,
-        // Keep players and members, but reset their game counts and states
-        players: prev.players.map((p) => ({
-          ...p,
-          state: 'waiting' as const,
-          gameCount: 0,
-          lastGameEndAt: null,
-          teammateHistory: {},
-          recentTeammates: undefined,
-        })),
-        teams: [],
-        courts: prev.session ? createInitialCourts(prev.session.courtsCount) : [],
-        auditLogs: [],
-      }));
-      addAuditLog('session_reset', {});
+      // 2. Get all queued teams to delete
+      const queuedTeams = state.teams.filter((t) => t.state === 'queued');
+      console.log(`Found ${queuedTeams.length} queued teams to delete`);
+      
+      // 3. Get all players to reset (NOT delete, just reset their stats)
+      const allPlayers = state.players;
+      console.log(`Found ${allPlayers.length} players to reset game stats`);
+      
+      // 4. Delete ALL teams (playing + queued) from Supabase
+      const allTeamIds = [...playingTeams, ...queuedTeams].map(t => t.id);
+      if (allTeamIds.length > 0) {
+        await Promise.all(allTeamIds.map(teamId => teamsApi.delete(teamId)));
+        console.log(`✅ Deleted ${allTeamIds.length} teams from Supabase`);
+      }
+      
+      // 5. Reset ALL players' game stats in Supabase (keep players, just reset stats)
+      if (allPlayers.length > 0) {
+        console.log(`📤 Batch resetting ${allPlayers.length} players' game stats in Supabase...`);
+        const playerUpdates = allPlayers.map((player) => ({
+          playerId: player.id,
+          updates: {
+            state: 'waiting' as const,
+            gameCount: 0,
+            lastGameEndAt: null,
+            recentTeammates: [],
+            teammateHistory: {},
+          }
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Batch reset ${allPlayers.length} players' game stats in Supabase`);
+      }
+      
+      // 6. Update local state - KEEP players, just reset their stats
+      setState((prev) => {
+        return {
+          ...prev,
+          players: prev.players.map(p => ({
+            ...p,
+            state: 'waiting' as const,
+            gameCount: 0,
+            lastGameEndAt: null,
+            recentTeammates: [],
+            teammateHistory: {},
+          })),
+          teams: [], // Clear all teams
+          courts: prev.courts.map((c) => ({
+            ...c,
+            status: 'available' as const,
+            currentTeamId: null,
+            timerMs: 0,
+            isPaused: false,
+          })),
+          auditLogs: [],
+        };
+      });
+      
+      console.log('✅ Session reset complete - games ended, teams deleted, players kept but stats reset');
+      addAuditLog('session_reset', {
+        playingTeamsEnded: playingTeams.length,
+        queuedTeamsDeleted: queuedTeams.length,
+        playersReset: allPlayers.length,
+      });
     } catch (error) {
-      console.error('Failed to reset game counts in Supabase:', error);
-      // Still update local state even if API fails
-      setState((prev) => ({
-        ...prev,
-        players: prev.players.map((p) => ({
-          ...p,
-          state: 'waiting' as const,
-          gameCount: 0,
-          lastGameEndAt: null,
-          teammateHistory: {},
-          recentTeammates: undefined,
-        })),
-        teams: [],
-        courts: prev.session ? createInitialCourts(prev.session.courtsCount) : [],
-        auditLogs: [],
-      }));
-      addAuditLog('session_reset', {});
+      console.error('❌ Failed to reset session:', error);
+      throw error;
     }
-  }, [addAuditLog]);
+  }, [addAuditLog, state.teams, state.players]);
 
   // Member management functions with Supabase sync
   const addMember = useCallback(async (name: string, gender?: Gender, rank?: Rank) => {
@@ -1046,14 +1022,14 @@ export function useGameState() {
     }
   }, [addAuditLog]);
 
-  const addMemberAsPlayer = useCallback((memberId: string) => {
+  const addMemberAsPlayer = useCallback(async (memberId: string) => {
     const member = state.members.find(m => m.id === memberId);
     if (member) {
-      // Check if member already registered
-      const existingPlayer = state.players.find(p => p.name.startsWith(member.name));
+      // Check if member already registered with exact name match
+      const existingPlayer = state.players.find(p => p.name === member.name);
       if (!existingPlayer) {
         // Create unique name if duplicate exists
-        const existing = state.players.filter((p) => p.name.startsWith(member.name));
+        const existing = state.players.filter((p) => p.name === member.name || p.name.startsWith(`${member.name}(`));
         const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
         
         const player: Player = {
@@ -1067,6 +1043,12 @@ export function useGameState() {
           createdAt: new Date(),
         };
         
+        // Save to Supabase FIRST
+        console.log(`📤 Adding player to Supabase:`, player.name);
+        await playersApi.add(player);
+        console.log(`✅ Added player to Supabase:`, player.name);
+        
+        // Then update local state
         setState((prev) => {
           return {
             ...prev,
@@ -1082,60 +1064,63 @@ export function useGameState() {
     try {
       const newPlayers: Player[] = [];
       
-      setState((prev) => {
-        const playersToAdd: Player[] = [];
-        
-        memberIds.forEach(memberId => {
-          const member = prev.members.find(m => m.id === memberId);
-          if (member) {
-            // Check if member already registered
-            const existingPlayer = prev.players.find(p => p.name.startsWith(member.name));
-            if (!existingPlayer) {
-              // Create unique name if duplicate exists
-              const existing = [...prev.players, ...playersToAdd].filter((p) => 
-                p.name.startsWith(member.name)
-              );
-              const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
-              
-              const player: Player = {
-                id: `player-${Date.now()}-${Math.random()}-${memberId}`,
-                name: finalName,
-                state: 'waiting',
-                gender: member.gender,
-                rank: member.rank,
-                gameCount: 0,
-                lastGameEndAt: null,
-                createdAt: new Date(),
-              };
-              
-              playersToAdd.push(player);
-              newPlayers.push(player);
-            }
+      // First, get current state to check for duplicates
+      const currentPlayers = state.players;
+      
+      memberIds.forEach(memberId => {
+        const member = state.members.find(m => m.id === memberId);
+        if (member) {
+          // Check if member already registered with exact name match
+          const existingPlayer = currentPlayers.find(p => p.name === member.name);
+          const alreadyInNewPlayers = newPlayers.find(p => p.name === member.name);
+          
+          if (!existingPlayer && !alreadyInNewPlayers) {
+            // Create unique name if duplicate exists
+            const existing = [...currentPlayers, ...newPlayers].filter((p) => 
+              p.name === member.name || p.name.startsWith(`${member.name}(`)
+            );
+            const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
+            
+            const player: Player = {
+              id: `player-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${memberId}`,
+              name: finalName,
+              state: 'waiting',
+              gender: member.gender,
+              rank: member.rank,
+              gameCount: 0,
+              lastGameEndAt: null,
+              createdAt: new Date(),
+            };
+            
+            newPlayers.push(player);
           }
-        });
-        
-        return {
-          ...prev,
-          players: [...prev.players, ...playersToAdd],
-        };
+        }
       });
       
-      // Batch save to Supabase
+      // Batch save to Supabase FIRST using batch API
       if (newPlayers.length > 0) {
-        await Promise.all(
-          newPlayers.map(player => playersApi.add(player))
-        );
+        console.log(`📤 Batch saving ${newPlayers.length} players to Supabase:`, newPlayers.map(p => p.name));
+        
+        // Use batch API for better performance
+        await playersApi.addBatch(newPlayers);
+        
         console.log(`✅ Batch added ${newPlayers.length} players to Supabase`);
+        
+        // Then update local state
+        setState((prev) => ({
+          ...prev,
+          players: [...prev.players, ...newPlayers],
+        }));
       }
       
       addAuditLog('batch_members_added_as_players', { count: newPlayers.length });
       return newPlayers.length;
     } catch (error) {
-      console.error('Failed to batch add players to Supabase:', error);
+      console.error('❌ Failed to batch add players to Supabase:', error);
       addAuditLog('batch_members_added_as_players', { count: 0, error: String(error) });
-      return 0;
+      throw error; // Re-throw to handle in UI
     }
-  }, [addAuditLog, state.members]);
+  }, [addAuditLog, state.members, state.players]);
 
   const syncFromSupabase = useCallback(async () => {
     try {
@@ -1143,75 +1128,136 @@ export function useGameState() {
       
       // Load members
       const membersFromDb = await membersApi.getAll();
+      console.log(`📦 Loaded ${membersFromDb.length} members from Supabase`);
       
       // Load players
       const playersFromDb = await playersApi.getAll();
+      console.log(`👥 Loaded ${playersFromDb.length} players from Supabase:`, playersFromDb.map(p => ({ id: p.id, name: p.name, state: p.state })));
       
       // Load teams
       const teamsFromDb = await teamsApi.getAll();
-      const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
+      console.log(`🏐 RAW teams from Supabase:`, teamsFromDb.map(t => ({ id: t.id, name: t.name, state: t.state, playerIds: t.playerIds })));
       
+      const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
+      const finishedTeams = teamsFromDb.filter(t => t.state === 'finished');
+      
+      console.log(`🏐 Loaded ${activeTeams.length} active teams from Supabase (total: ${teamsFromDb.length}):`, 
+        activeTeams.map(t => ({ id: t.id, name: t.name, state: t.state, playerCount: t.playerIds.length })));
+      
+      // Clean up finished teams if there are any
+      if (finishedTeams.length > 0) {
+        console.log(`🧹 Cleaning up ${finishedTeams.length} finished teams from Supabase...`);
+        await teamsApi.deleteFinished();
+        console.log(`✅ Cleaned up ${finishedTeams.length} finished teams`);
+      }
+      
+      // Update local state with all data from Supabase
       setState((prev) => {
-        // Restore courts based on playing teams
-        const restoredCourts = prev.courts.map(court => {
-          const playingTeam = activeTeams.find(
-            t => t.state === 'playing' && t.assignedCourtId === court.id
-          );
-          
-          if (playingTeam) {
-            return {
-              ...court,
-              status: 'occupied' as const,
-              currentTeamId: playingTeam.id,
-              timerMs: 0,
-              isPaused: false,
-            };
+        // Rebuild courts based on teams data
+        let updatedCourts = [...prev.courts];
+        
+        // First, reset all courts to available
+        updatedCourts = updatedCourts.map(court => ({
+          ...court,
+          status: 'available' as const,
+          currentTeamId: null,
+          timerMs: 0,
+        }));
+        
+        // Then, assign playing teams to courts
+        activeTeams.forEach(team => {
+          if (team.state === 'playing' && team.assignedCourtId) {
+            const courtIndex = updatedCourts.findIndex(c => c.id === team.assignedCourtId);
+            if (courtIndex !== -1) {
+              updatedCourts[courtIndex] = {
+                ...updatedCourts[courtIndex],
+                status: 'occupied' as const,
+                currentTeamId: team.id,
+              };
+            }
           }
-          
-          return {
-            ...court,
-            status: 'available' as const,
-            currentTeamId: null,
-            timerMs: 0,
-            isPaused: false,
-          };
         });
         
-        // Update player states based on teams
-        const teamPlayerIds = new Set(activeTeams.flatMap(t => t.playerIds));
-        const restoredPlayers = playersFromDb.map(player => {
-          if (!teamPlayerIds.has(player.id)) return player;
-          
-          const playerTeam = activeTeams.find(t => t.playerIds.includes(player.id));
-          if (!playerTeam) return player;
-          
-          return {
-            ...player,
-            state: playerTeam.state === 'playing' ? 'playing' as const : 'queued' as const,
-          };
+        // Sync player states with team data
+        // Build a map of player IDs to their team state
+        const playerTeamStateMap = new Map<string, 'queued' | 'playing'>();
+        activeTeams.forEach(team => {
+          team.playerIds.forEach(playerId => {
+            playerTeamStateMap.set(playerId, team.state);
+          });
+        });
+        
+        // Update player states based on team data
+        const syncedPlayers = playersFromDb.map(player => {
+          const teamState = playerTeamStateMap.get(player.id);
+          if (teamState) {
+            // Player is in an active team, sync their state
+            return { ...player, state: teamState };
+          } else if (player.state === 'queued' || player.state === 'playing') {
+            // Player thinks they're in a team but they're not - reset to waiting
+            console.log(`⚠️ Player ${player.name} (${player.id}) has state '${player.state}' but no team found. Resetting to 'waiting'`);
+            return { ...player, state: 'waiting' as const };
+          }
+          // Player state is waiting/priority/resting - keep as is
+          return player;
         });
         
         return {
           ...prev,
-          members: membersFromDb.length > 0 ? membersFromDb : prev.members,
-          players: restoredPlayers,
+          members: membersFromDb,
+          players: syncedPlayers,
           teams: activeTeams,
-          courts: restoredCourts,
+          courts: updatedCourts,
         };
       });
       
-      console.log('✅ Manual sync completed:', {
-        members: membersFromDb.length,
-        players: playersFromDb.length,
-        teams: activeTeams.length,
-      });
-      
+      console.log('✅ Sync from Supabase complete');
       return true;
     } catch (error) {
       console.error('⚠️ Failed to sync from Supabase:', error);
       return false;
     }
   }, []);
+
+  const resetMembers = useCallback(async () => {
+    console.log('🔄 Starting members reset...');
+    
+    try {
+      // 1. Delete all existing players from Supabase
+      const allPlayerIds = state.players.map(p => p.id);
+      if (allPlayerIds.length > 0) {
+        await deletePlayers(allPlayerIds);
+        console.log(`✅ Deleted ${allPlayerIds.length} players from Supabase`);
+      }
+      
+      // 2. Create new initial members (70 people)
+      const newMembers = createInitialMembers();
+      console.log(`📤 Resetting members in Supabase (${newMembers.length} new members)...`);
+      
+      // 3. Atomic reset: delete all old members and add new ones
+      const { deletedCount, addedCount } = await membersApi.reset(newMembers);
+      console.log(`✅ Reset complete: deleted ${deletedCount} members, added ${addedCount} members`);
+      
+      // 4. Update local state
+      setState((prev) => ({
+        ...prev,
+        members: newMembers,
+        players: [], // Clear all players
+      }));
+      
+      console.log('✅ Members reset complete - 70 new members added, all players cleared');
+      addAuditLog('members_reset', {
+        deletedMembers: deletedCount,
+        deletedPlayers: allPlayerIds.length,
+        addedMembers: addedCount,
+      });
+      
+      return addedCount;
+    } catch (error) {
+      console.error('❌ Failed to reset members:', error);
+      throw error;
+    }
+  }, [addAuditLog, state.players, deletePlayers]);
 
   return {
     state,
@@ -1220,6 +1266,7 @@ export function useGameState() {
     addPlayer,
     updatePlayer,
     deletePlayer,
+    deletePlayers,
     updatePlayerState,
     performAutoMatch,
     startGame,
@@ -1237,5 +1284,6 @@ export function useGameState() {
     addMemberAsPlayer,
     addMembersAsPlayers,
     syncFromSupabase,
+    resetMembers,
   };
 }

@@ -114,4 +114,113 @@ export const membersApi = {
       throw error;
     }
   },
+
+  // Batch add members
+  async addBatch(members: Member[]): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE}/members/batch`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ members }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to batch add members:', error);
+        throw new Error(error.error || 'Failed to batch add members');
+      }
+    } catch (error) {
+      console.error('Error batch adding members:', error);
+      throw error;
+    }
+  },
+
+  // Delete all members
+  async deleteAll(): Promise<number> {
+    try {
+      const response = await fetch(`${API_BASE}/members/all`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to delete all members:', error);
+        throw new Error(error.error || 'Failed to delete all members');
+      }
+
+      const data = await response.json();
+      return data.deletedCount || 0;
+    } catch (error) {
+      console.error('Error deleting all members:', error);
+      throw error;
+    }
+  },
+
+  // Reset members - atomically delete all and add new ones
+  async reset(members: Member[]): Promise<{ deletedCount: number; addedCount: number }> {
+    try {
+      const response = await fetch(`${API_BASE}/members/reset`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ members }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to reset members:', error);
+        throw new Error(error.error || 'Failed to reset members');
+      }
+
+      const data = await response.json();
+      return {
+        deletedCount: data.deletedCount || 0,
+        addedCount: data.addedCount || 0,
+      };
+    } catch (error) {
+      console.error('Error resetting members:', error);
+      throw error;
+    }
+  },
+
+  // Migrate gender values from 'male'/'female' to '남'/'녀'
+  async migrateGender(): Promise<{ membersUpdated: number; playersUpdated: number }> {
+    try {
+      console.log('🔄 Starting gender migration...');
+      
+      const response = await fetch(`${API_BASE}/members/migrate-gender`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to migrate gender:', error);
+        throw new Error(error.error || 'Failed to migrate gender');
+      }
+
+      const data = await response.json();
+      console.log(`✅ Gender migration complete: ${data.membersUpdated} members, ${data.playersUpdated} players updated`);
+      
+      return {
+        membersUpdated: data.membersUpdated || 0,
+        playersUpdated: data.playersUpdated || 0,
+      };
+    } catch (error) {
+      console.error('Error migrating gender:', error);
+      throw error;
+    }
+  },
 };

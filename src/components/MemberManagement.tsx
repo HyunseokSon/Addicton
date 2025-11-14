@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
-import { UserPlus, Edit2, Trash2, Check, X, UserCheck, CheckCircle2, Search, Filter, Users } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Check, X, UserCheck, CheckCircle2, Search, Filter, Users, Database } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -14,6 +14,8 @@ import {
 } from './ui/select';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import React from 'react';
+import { toast } from 'sonner';
+import { membersApi } from '../utils/api/membersApi';
 
 interface MemberManagementProps {
   members: Member[];
@@ -23,6 +25,15 @@ interface MemberManagementProps {
   onDeleteMember: (id: string) => void;
   onAddMemberAsPlayer: (memberId: string) => void;
   addMembersAsPlayers: (memberIds: string[]) => Promise<number>;
+  syncFromSupabase: () => Promise<boolean>;
+  resetMembers: () => Promise<number>;
+  setLoadingModal: React.Dispatch<React.SetStateAction<{
+    open: boolean;
+    title: string;
+    description?: string;
+    status: 'loading' | 'success' | 'error';
+    errorMessage?: string;
+  }>>;
   readOnly?: boolean;
 }
 
@@ -34,6 +45,9 @@ export function MemberManagement({
   onDeleteMember,
   onAddMemberAsPlayer,
   addMembersAsPlayers,
+  syncFromSupabase,
+  resetMembers,
+  setLoadingModal,
   readOnly,
 }: MemberManagementProps) {
   const [newName, setNewName] = useState('');
@@ -50,7 +64,7 @@ export function MemberManagement({
 
   // Check if a member is already registered as a player
   const isMemberRegistered = (memberName: string) => {
-    return players.some(player => player.name.startsWith(memberName));
+    return players.some(player => player.name === memberName);
   };
 
   // Filter members based on search and status
@@ -68,12 +82,12 @@ export function MemberManagement({
       
       return matchesSearch && matchesStatus;
     });
-  }, [members, searchQuery, filterStatus]);
+  }, [members, searchQuery, filterStatus, players]);
 
   // Get unregistered members from filtered list
   const unregisteredMembers = useMemo(() => {
     return filteredMembers.filter(m => !isMemberRegistered(m.name));
-  }, [filteredMembers]);
+  }, [filteredMembers, players]);
 
   const handleAdd = () => {
     if (newName.trim()) {
@@ -141,10 +155,154 @@ export function MemberManagement({
   const handleBatchAdd = async () => {
     if (selectedMemberIds.size === 0) return;
     
-    setIsBatchAdding(true);
-    const count = await addMembersAsPlayers(Array.from(selectedMemberIds));
-    setIsBatchAdding(false);
-    setSelectedMemberIds(new Set());
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '일괄 참가 등록 중',
+      description: `${selectedMemberIds.size}명의 모임원을 참가 등록하고 있습니다...`,
+      status: 'loading',
+    });
+
+    try {
+      const count = await addMembersAsPlayers(Array.from(selectedMemberIds));
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '일괄 참가 등록 중',
+        description: `${count}명이 등록되었습니다. 데이터를 새로고침합니다...`,
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '일괄 참가 완료',
+        description: `${count}명이 참가 등록되었습니다.`,
+        status: 'success',
+      });
+
+      setSelectedMemberIds(new Set());
+
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 1500);
+
+    } catch (error) {
+      console.error('Batch add failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '일괄 참가 실패',
+        status: 'error',
+        errorMessage: '등록 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
+  };
+
+  const handleResetMembers = async () => {
+    if (!confirm('⚠️ 경고!\n\n모든 모임원과 참가자 정보가 삭제되고,\n70명의 새로운 모임원 데이터로 초기화됩니다.\n\n정말 초기화하시겠습니까?')) {
+      return;
+    }
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '모임원 DB 초기화 중',
+      description: '기존 모임원과 참가자를 삭제하고 있습니다...',
+      status: 'loading',
+    });
+
+    try {
+      const count = await resetMembers();
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '모임원 DB 초기화 중',
+        description: `${count}명의 새로운 모임원이 추가되었습니다. 데이터를 새로고침합니다...`,
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '초기화 완료',
+        description: `${count}명의 새로운 모임원이 등록되었습니다.`,
+        status: 'success',
+      });
+
+      // Auto close after 2 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 2000);
+
+    } catch (error) {
+      console.error('Reset members failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '초기화 실패',
+        status: 'error',
+        errorMessage: '초기화 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
+  };
+
+  const handleMigrateGender = async () => {
+    if (!confirm('DB의 성별 데이터를 한글로 변환하시겠습니까?\n\nmale → 남\nfemale → 녀')) {
+      return;
+    }
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '성별 데이터 변환 중',
+      description: '모임원과 참가자의 성별 데이터를 변환하고 있습니다...',
+      status: 'loading',
+    });
+
+    try {
+      const { membersUpdated, playersUpdated } = await membersApi.migrateGender();
+      
+      // Update loading modal with sync message
+      setLoadingModal({
+        open: true,
+        title: '성별 데이터 변환 중',
+        description: `모임원 ${membersUpdated}명, 참가자 ${playersUpdated}명이 업데이트되었습니다. 데이터를 새로고침합니다...`,
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Show success
+      setLoadingModal({
+        open: true,
+        title: '변환 완료',
+        description: `성별 데이터가 한글로 변환되었습니다.\n모임원: ${membersUpdated}명, 참가자: ${playersUpdated}명`,
+        status: 'success',
+      });
+
+      // Auto close after 2 seconds
+      setTimeout(() => {
+        setLoadingModal(prev => ({ ...prev, open: false }));
+      }, 2000);
+
+    } catch (error) {
+      console.error('Gender migration failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '변환 실패',
+        status: 'error',
+        errorMessage: '변환 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
   return (
@@ -201,6 +359,16 @@ export function MemberManagement({
               <UserPlus className="size-3.5 md:size-4 mr-2" />
               모임원 추가
             </Button>
+            <div className="pt-2 border-t">
+              <Button 
+                onClick={handleResetMembers} 
+                variant="outline"
+                className="w-full h-9 md:h-10 border-2 border-red-300 hover:bg-red-50 hover:border-red-400 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation text-red-700"
+              >
+                <Database className="size-3.5 md:size-4 mr-2" />
+                모임원 DB 초기화 (70명)
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -299,6 +467,7 @@ export function MemberManagement({
                   onToggleSelect={handleToggleSelect}
                   onAddMemberAsPlayer={onAddMemberAsPlayer}
                   onDeleteMember={onDeleteMember}
+                  setLoadingModal={setLoadingModal}
                   readOnly={readOnly}
                 />
               ))}
@@ -329,6 +498,13 @@ interface MemberCardProps {
   onToggleSelect: (memberId: string) => void;
   onAddMemberAsPlayer: (memberId: string) => void;
   onDeleteMember: (memberId: string) => void;
+  setLoadingModal: React.Dispatch<React.SetStateAction<{
+    open: boolean;
+    title: string;
+    description?: string;
+    status: 'loading' | 'success' | 'error';
+    errorMessage?: string;
+  }>>;
   readOnly?: boolean;
 }
 
@@ -349,6 +525,7 @@ const MemberCard = React.memo(function MemberCard({
   onToggleSelect,
   onAddMemberAsPlayer,
   onDeleteMember,
+  setLoadingModal,
   readOnly,
 }: MemberCardProps) {
   return (
@@ -475,7 +652,40 @@ const MemberCard = React.memo(function MemberCard({
             !readOnly && !isSelected && (
               <Button
                 size="sm"
-                onClick={() => onAddMemberAsPlayer(member.id)}
+                onClick={async () => {
+                  // Show loading modal
+                  setLoadingModal({
+                    open: true,
+                    title: '참가 등록 중',
+                    description: `${member.name}님을 참가자로 등록하고 있습니다...`,
+                    status: 'loading',
+                  });
+
+                  try {
+                    await onAddMemberAsPlayer(member.id);
+                    
+                    // Show success
+                    setLoadingModal({
+                      open: true,
+                      title: '참가 등록 완료',
+                      description: `${member.name}님이 참가자로 등록되었습니다.`,
+                      status: 'success',
+                    });
+
+                    // Auto close after 1.5 seconds
+                    setTimeout(() => {
+                      setLoadingModal(prev => ({ ...prev, open: false }));
+                    }, 1500);
+                  } catch (error) {
+                    console.error('Failed to add member as player:', error);
+                    setLoadingModal({
+                      open: true,
+                      title: '참가 등록 실패',
+                      status: 'error',
+                      errorMessage: '등록 중 오류가 발생했습니다. 다시 시도해주세요.',
+                    });
+                  }
+                }}
                 className="w-full h-8 md:h-9 bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-sm text-[10px] md:text-xs touch-manipulation"
               >
                 <UserCheck className="size-3 md:size-3.5 mr-1.5 md:mr-2" />
