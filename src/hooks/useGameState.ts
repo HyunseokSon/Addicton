@@ -3,6 +3,7 @@ import { AppState, Player, Team, Court, Session, PlayerState, AuditLog, Member, 
 import { autoMatch, updatePriorityStatus } from '../utils/matching';
 import { createInitialMembers } from '../data/initialMembers';
 import { membersApi } from '../utils/api/membersApi';
+import { playersApi } from '../utils/api/playersApi';
 
 const STORAGE_KEY = 'addiction-game-matching-state';
 
@@ -194,7 +195,28 @@ export function useGameState() {
       }
     };
 
+    const loadPlayersFromSupabase = async () => {
+      try {
+        console.log('🔄 Loading players from Supabase...');
+        const playersFromDb = await playersApi.getAll();
+        
+        if (playersFromDb && playersFromDb.length > 0) {
+          console.log('✅ Loaded players from Supabase:', playersFromDb.length);
+          setState((prev) => ({
+            ...prev,
+            players: playersFromDb,
+          }));
+        } else {
+          console.log('ℹ️ No players found in Supabase');
+        }
+      } catch (error) {
+        console.error('⚠️ Failed to load players from Supabase:', error);
+        // Continue using local players
+      }
+    };
+
     loadMembersFromSupabase();
+    loadPlayersFromSupabase();
   }, []); // Run only once on mount
 
   const addAuditLog = useCallback((type: string, payload: any) => {
@@ -285,27 +307,48 @@ export function useGameState() {
     addAuditLog('session_updated', { updates });
   }, [addAuditLog]);
 
-  const addPlayer = useCallback((name: string) => {
-    setState((prev) => {
-      // Check for duplicate names
-      const existing = prev.players.filter((p) => p.name.startsWith(name));
-      const finalName = existing.length > 0 ? `${name}(${existing.length + 1})` : name;
+  const addPlayer = useCallback(async (name: string) => {
+    const player: Player = {
+      id: `player-${Date.now()}-${Math.random()}`,
+      name,
+      state: 'waiting',
+      gameCount: 0,
+      lastGameEndAt: null,
+      createdAt: new Date(),
+    };
+    
+    try {
+      // Save to Supabase first
+      await playersApi.add(player);
       
-      const player: Player = {
-        id: `player-${Date.now()}-${Math.random()}`,
-        name: finalName,
-        state: 'waiting',
-        gameCount: 0,
-        lastGameEndAt: null,
-        createdAt: new Date(),
-      };
-      
-      return {
-        ...prev,
-        players: [...prev.players, player],
-      };
-    });
-    addAuditLog('player_added', { name });
+      // Update local state
+      setState((prev) => {
+        // Check for duplicate names
+        const existing = prev.players.filter((p) => p.name.startsWith(name));
+        const finalName = existing.length > 0 ? `${name}(${existing.length + 1})` : name;
+        
+        const finalPlayer: Player = { ...player, name: finalName };
+        
+        return {
+          ...prev,
+          players: [...prev.players, finalPlayer],
+        };
+      });
+      addAuditLog('player_added', { name });
+    } catch (error) {
+      console.error('Failed to add player to Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => {
+        const existing = prev.players.filter((p) => p.name.startsWith(name));
+        const finalName = existing.length > 0 ? `${name}(${existing.length + 1})` : name;
+        const finalPlayer: Player = { ...player, name: finalName };
+        return {
+          ...prev,
+          players: [...prev.players, finalPlayer],
+        };
+      });
+      addAuditLog('player_added', { name });
+    }
   }, [addAuditLog]);
 
   const updatePlayer = useCallback((playerId: string, updates: Partial<Player>) => {
@@ -318,16 +361,34 @@ export function useGameState() {
     addAuditLog('player_updated', { playerId, updates });
   }, [addAuditLog]);
 
-  const deletePlayer = useCallback((playerId: string) => {
-    setState((prev) => ({
-      ...prev,
-      players: prev.players.filter((p) => p.id !== playerId),
-      teams: prev.teams.map((t) => ({
-        ...t,
-        playerIds: t.playerIds.filter((id) => id !== playerId),
-      })),
-    }));
-    addAuditLog('player_deleted', { playerId });
+  const deletePlayer = useCallback(async (playerId: string) => {
+    try {
+      // Delete from Supabase first
+      await playersApi.delete(playerId);
+      
+      // Update local state
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => p.id !== playerId),
+        teams: prev.teams.map((t) => ({
+          ...t,
+          playerIds: t.playerIds.filter((id) => id !== playerId),
+        })),
+      }));
+      addAuditLog('player_deleted', { playerId });
+    } catch (error) {
+      console.error('Failed to delete player from Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => p.id !== playerId),
+        teams: prev.teams.map((t) => ({
+          ...t,
+          playerIds: t.playerIds.filter((id) => id !== playerId),
+        })),
+      }));
+      addAuditLog('player_deleted', { playerId });
+    }
   }, [addAuditLog]);
 
   const updatePlayerState = useCallback((playerIds: string[], newState: PlayerState) => {
@@ -525,23 +586,47 @@ export function useGameState() {
     addAuditLog('team_updated', { teamId, playerIds });
   }, [addAuditLog]);
 
-  const resetSession = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      // Keep players and members, but reset their game counts and states
-      players: prev.players.map((p) => ({
-        ...p,
-        state: 'waiting' as const,
-        gameCount: 0,
-        lastGameEndAt: null,
-        teammateHistory: {},
-        recentTeammates: undefined,
-      })),
-      teams: [],
-      courts: prev.session ? createInitialCourts(prev.session.courtsCount) : [],
-      auditLogs: [],
-    }));
-    addAuditLog('session_reset', {});
+  const resetSession = useCallback(async () => {
+    try {
+      // Reset game counts in Supabase
+      await playersApi.resetGameCounts();
+      
+      // Update local state
+      setState((prev) => ({
+        ...prev,
+        // Keep players and members, but reset their game counts and states
+        players: prev.players.map((p) => ({
+          ...p,
+          state: 'waiting' as const,
+          gameCount: 0,
+          lastGameEndAt: null,
+          teammateHistory: {},
+          recentTeammates: undefined,
+        })),
+        teams: [],
+        courts: prev.session ? createInitialCourts(prev.session.courtsCount) : [],
+        auditLogs: [],
+      }));
+      addAuditLog('session_reset', {});
+    } catch (error) {
+      console.error('Failed to reset game counts in Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.map((p) => ({
+          ...p,
+          state: 'waiting' as const,
+          gameCount: 0,
+          lastGameEndAt: null,
+          teammateHistory: {},
+          recentTeammates: undefined,
+        })),
+        teams: [],
+        courts: prev.session ? createInitialCourts(prev.session.courtsCount) : [],
+        auditLogs: [],
+      }));
+      addAuditLog('session_reset', {});
+    }
   }, [addAuditLog]);
 
   // Member management functions with Supabase sync
@@ -623,13 +708,13 @@ export function useGameState() {
     }
   }, [addAuditLog]);
 
-  const addMemberAsPlayer = useCallback((memberId: string) => {
-    setState((prev) => {
-      const member = prev.members.find((m) => m.id === memberId);
-      if (!member) return prev;
+  const addMemberAsPlayer = useCallback(async (memberId: string) => {
+    try {
+      const member = state.members.find((m) => m.id === memberId);
+      if (!member) return;
       
       // Check for duplicate names
-      const existing = prev.players.filter((p) => p.name.startsWith(member.name));
+      const existing = state.players.filter((p) => p.name.startsWith(member.name));
       const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
       
       const player: Player = {
@@ -643,13 +728,44 @@ export function useGameState() {
         createdAt: new Date(),
       };
       
-      return {
+      // Save to Supabase first
+      await playersApi.add(player);
+      
+      // Update local state
+      setState((prev) => ({
         ...prev,
         players: [...prev.players, player],
-      };
-    });
-    addAuditLog('member_added_as_player', { memberId });
-  }, [addAuditLog]);
+      }));
+      addAuditLog('member_added_as_player', { memberId });
+    } catch (error) {
+      console.error('Failed to add player to Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => {
+        const member = prev.members.find((m) => m.id === memberId);
+        if (!member) return prev;
+        
+        const existing = prev.players.filter((p) => p.name.startsWith(member.name));
+        const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
+        
+        const player: Player = {
+          id: `player-${Date.now()}-${Math.random()}`,
+          name: finalName,
+          state: 'waiting',
+          gender: member.gender,
+          rank: member.rank,
+          gameCount: 0,
+          lastGameEndAt: null,
+          createdAt: new Date(),
+        };
+        
+        return {
+          ...prev,
+          players: [...prev.players, player],
+        };
+      });
+      addAuditLog('member_added_as_player', { memberId });
+    }
+  }, [addAuditLog, state.members, state.players]);
 
   return {
     state,

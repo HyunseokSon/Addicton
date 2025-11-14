@@ -100,4 +100,100 @@ app.delete("/make-server-41b22d2d/members/:id", async (c) => {
   }
 });
 
+// ============= PLAYERS ENDPOINTS =============
+
+// Get all players
+app.get("/make-server-41b22d2d/players", async (c) => {
+  try {
+    const players = await kv.get("players");
+    return c.json(players || []);
+  } catch (error) {
+    console.error("Error getting players:", error);
+    return c.json({ error: "Failed to get players", details: String(error) }, 500);
+  }
+});
+
+// Add a new player
+app.post("/make-server-41b22d2d/players", async (c) => {
+  try {
+    const player = await c.req.json();
+    
+    if (!player || !player.id || !player.name) {
+      return c.json({ error: "Invalid player data" }, 400);
+    }
+
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = [...players, player];
+    await kv.set("players", updatedPlayers);
+    
+    return c.json({ player, success: true });
+  } catch (error) {
+    console.error("Error adding player:", error);
+    return c.json({ error: "Failed to add player", details: String(error) }, 500);
+  }
+});
+
+// Update a player
+app.put("/make-server-41b22d2d/players/:id", async (c) => {
+  try {
+    const playerId = c.req.param("id");
+    const updates = await c.req.json();
+    
+    if (!playerId || !updates) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = players.map((p: any) =>
+      p.id === playerId ? { ...p, ...updates } : p
+    );
+    await kv.set("players", updatedPlayers);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error updating player:", error);
+    return c.json({ error: "Failed to update player", details: String(error) }, 500);
+  }
+});
+
+// Delete a player
+app.delete("/make-server-41b22d2d/players/:id", async (c) => {
+  try {
+    const playerId = c.req.param("id");
+    
+    if (!playerId) {
+      return c.json({ error: "Invalid player ID" }, 400);
+    }
+
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = players.filter((p: any) => p.id !== playerId);
+    await kv.set("players", updatedPlayers);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting player:", error);
+    return c.json({ error: "Failed to delete player", details: String(error) }, 500);
+  }
+});
+
+// Reset game counts for all players (for 초기화 button)
+app.post("/make-server-41b22d2d/players/reset-game-counts", async (c) => {
+  try {
+    const players = (await kv.get("players")) || [];
+    const updatedPlayers = players.map((p: any) => ({
+      ...p,
+      gameCount: 0,
+      lastGameEndAt: null,
+      teammateHistory: {},
+      recentTeammates: undefined,
+    }));
+    await kv.set("players", updatedPlayers);
+    
+    return c.json({ success: true, count: updatedPlayers.length });
+  } catch (error) {
+    console.error("Error resetting game counts:", error);
+    return c.json({ error: "Failed to reset game counts", details: String(error) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

@@ -102,18 +102,18 @@ export function PlayerPanel({
   const queuedPlayers = players.filter((p) => p.state === 'queued');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-5">
       {/* Waiting Players */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm text-gray-700">대기 중</h3>
-          <Badge variant="secondary" className="text-xs px-2 py-0.5">
+        <div className="flex items-center justify-between mb-2.5 md:mb-3">
+          <h3 className="font-semibold text-xs md:text-sm text-gray-700">대기 중</h3>
+          <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
             {waitingPlayers.length}명
           </Badge>
         </div>
-        <div className="space-y-2 min-h-[100px] bg-blue-50/30 rounded-lg border-2 border-dashed border-blue-200 p-3">
+        <div className="space-y-1.5 md:space-y-2 min-h-[100px] bg-gradient-to-br from-blue-50/30 to-blue-50/10 rounded-xl border-2 border-dashed border-blue-200 p-2.5 md:p-3">
           {waitingPlayers.length === 0 ? (
-            <p className="text-xs text-center text-gray-400 py-6">대기중인 참가자가 없습니다</p>
+            <p className="text-[10px] md:text-xs text-center text-gray-400 py-8">대기중인 참가자가 없습니다</p>
           ) : (
             waitingPlayers.map((player) => (
               <WaitingPlayerCard
@@ -141,23 +141,23 @@ export function PlayerPanel({
       {/* Resting Players */}
       {restingPlayers.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm text-gray-700">휴식 중</h3>
-            <Badge variant="secondary" className="text-xs px-2 py-0.5">
+          <div className="flex items-center justify-between mb-2.5 md:mb-3">
+            <h3 className="font-semibold text-xs md:text-sm text-gray-700">휴식 중</h3>
+            <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
               {restingPlayers.length}명
             </Badge>
           </div>
-          <div className="space-y-2 bg-gray-50/50 rounded-lg border border-gray-200 p-3">
+          <div className="space-y-1.5 md:space-y-2 bg-gray-50/50 rounded-xl border border-gray-200 p-2.5 md:p-3">
             {restingPlayers.map((player) => (
               <div
                 key={player.id}
-                className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-all"
+                className="bg-white border border-gray-200 rounded-lg p-2 md:p-2.5 hover:shadow-sm transition-all"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{player.name}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-0">
+                    <span className="text-xs md:text-sm truncate">{player.name}</span>
                     <div className="flex items-center gap-1">
-                      <Badge className={`text-xs px-2 py-0.5 ${STATE_COLORS[player.state]}`}>
+                      <Badge className={`text-[9px] md:text-xs px-1.5 py-0.5 ${STATE_COLORS[player.state]}`}>
                         {STATE_LABELS[player.state]}
                       </Badge>
                       <DropdownMenu>
@@ -165,9 +165,9 @@ export function PlayerPanel({
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="size-7 p-0 hover:bg-gray-100"
+                            className="size-6 md:size-7 p-0 hover:bg-gray-100 touch-manipulation"
                           >
-                            <ChevronDown className="size-3.5" />
+                            <ChevronDown className="size-3 md:size-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
@@ -184,26 +184,26 @@ export function PlayerPanel({
                       </DropdownMenu>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5 md:gap-1">
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => onAdjustGameCount(player.id, -1)}
                       disabled={player.gameCount <= 0}
-                      className="size-7 p-0 hover:bg-red-50"
+                      className="size-6 md:size-7 p-0 hover:bg-red-50 active:scale-90 touch-manipulation"
                       title="게임 수 감소"
                     >
-                      <Minus className="size-3.5" />
+                      <Minus className="size-3 md:size-3.5" />
                     </Button>
-                    <span className="text-xs text-gray-700 mx-1 font-mono min-w-[32px] text-center">{player.gameCount}회</span>
+                    <span className="text-[10px] md:text-xs text-gray-700 mx-0.5 md:mx-1 font-mono min-w-[24px] md:min-w-[32px] text-center">{player.gameCount}회</span>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => onAdjustGameCount(player.id, 1)}
-                      className="size-7 p-0 hover:bg-green-50"
+                      className="size-6 md:size-7 p-0 hover:bg-green-50 active:scale-90 touch-manipulation"
                       title="게임 수 증가"
                     >
-                      <Plus className="size-3.5" />
+                      <Plus className="size-3 md:size-3.5" />
                     </Button>
                   </div>
                 </div>

@@ -42,47 +42,47 @@ export function CourtCard({
 
   if (court.status === 'available') {
     return (
-      <div className="h-48 md:h-64 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center transition-all hover:border-gray-400">
+      <div className="h-40 md:h-56 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center transition-all hover:border-gray-400 hover:shadow-sm">
         <div className="text-center">
-          <div className="text-gray-400 mb-1 text-sm md:text-base">{court.name}</div>
-          <div className="text-xs text-gray-400">경기 대기중</div>
+          <div className="text-gray-500 mb-1.5 text-sm md:text-base font-medium">{court.name}</div>
+          <div className="text-[10px] md:text-xs text-gray-400 bg-white px-2 py-1 rounded-full border">경기 대기중</div>
         </div>
       </div>
     );
   }
 
   return (
-    <Card className="h-48 md:h-64 overflow-hidden border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-white shadow-md hover:shadow-lg transition-shadow">
-      <CardContent className="p-3 md:p-4 h-full flex flex-col">
+    <Card className="h-40 md:h-56 overflow-hidden border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-white shadow-md hover:shadow-xl transition-all">
+      <CardContent className="p-2.5 md:p-4 h-full flex flex-col">
         {/* Court header */}
-        <div className="flex items-center justify-between mb-2 md:mb-3">
-          <div className="flex items-center gap-2">
-            <div className="size-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="font-semibold text-emerald-900 text-sm md:text-base">{court.name}</span>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="size-1.5 md:size-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="font-semibold text-emerald-900 text-xs md:text-sm">{court.name}</span>
           </div>
-          <Badge variant="secondary" className="font-mono text-xs md:text-sm px-2 md:px-3 py-0.5 md:py-1 bg-white border border-gray-200">
-            <Clock className="size-3 md:size-3.5 mr-1 md:mr-1.5" />
+          <Badge variant="secondary" className="font-mono text-[10px] md:text-xs px-1.5 md:px-2.5 py-0.5 md:py-1 bg-white border border-emerald-200 shadow-sm">
+            <Clock className="size-2.5 md:size-3 mr-0.5 md:mr-1" />
             {formatTime(court.timerMs)}
           </Badge>
         </div>
 
         {/* Players grid */}
-        <div className="grid grid-cols-2 gap-1.5 md:gap-2 flex-1 mb-2 md:mb-3">
+        <div className="grid grid-cols-2 gap-1 md:gap-1.5 flex-1 mb-2">
           {teamPlayers.map((player, idx) => (
             <div
               key={player.id}
-              className="bg-white rounded-lg p-1.5 md:p-2 border border-emerald-200 flex items-center justify-center shadow-sm"
+              className="bg-white rounded-md md:rounded-lg p-1 md:p-1.5 border border-emerald-200 flex items-center justify-center shadow-sm hover:shadow-md transition-shadow"
             >
-              <span className="text-xs md:text-sm font-medium text-gray-900 truncate">{player.name}</span>
+              <span className="text-[10px] md:text-xs font-medium text-gray-900 truncate px-0.5">{player.name}</span>
             </div>
           ))}
           {/* Fill empty slots */}
           {Array.from({ length: 4 - teamPlayers.length }).map((_, idx) => (
             <div
               key={`empty-${idx}`}
-              className="bg-gray-50 rounded-lg p-1.5 md:p-2 border border-dashed border-gray-300 flex items-center justify-center"
+              className="bg-gray-50 rounded-md md:rounded-lg p-1 md:p-1.5 border border-dashed border-gray-300 flex items-center justify-center"
             >
-              <span className="text-xs text-gray-400">빈 자리</span>
+              <span className="text-[9px] md:text-[10px] text-gray-400">빈 자리</span>
             </div>
           ))}
         </div>
@@ -91,10 +91,10 @@ export function CourtCard({
         <Button
           variant="destructive"
           size="sm"
-          className="w-full h-8 md:h-9 font-medium text-xs md:text-sm"
+          className="w-full h-7 md:h-9 font-medium text-[10px] md:text-xs active:scale-95 transition-transform touch-manipulation shadow-sm hover:shadow-md"
           onClick={onEndGame}
         >
-          <StopCircle className="size-3.5 md:size-4 mr-1.5 md:mr-2" />
+          <StopCircle className="size-3 md:size-3.5 mr-1 md:mr-1.5" />
           경기 종료
         </Button>
       </CardContent>

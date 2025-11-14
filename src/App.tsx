@@ -173,54 +173,54 @@ export default function App() {
     <DndProvider backend={HTML5Backend}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
         {/* Header */}
-        <header className="bg-white border-b shadow-sm sticky top-0 z-50">
-          <div className="container mx-auto px-3 md:px-6 py-3 md:py-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div className="flex items-center gap-3">
+        <header className="bg-white/90 backdrop-blur-sm border-b shadow-sm sticky top-0 z-50">
+          <div className="container mx-auto px-3 md:px-6 py-2.5 md:py-3.5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
+              <div className="flex items-center gap-2 md:gap-3">
                 <img 
                   src={addictonLogo} 
                   alt="Addicton Logo" 
-                  className="size-12 md:size-16 object-contain rounded-lg" 
+                  className="size-10 md:size-14 object-contain rounded-lg shadow-sm" 
                 />
                 <div>
-                  <h1 className="text-lg md:text-2xl bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
+                  <h1 className="text-base md:text-xl bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
                     {state.session?.name || '에딕턴 게임 매칭'}
                   </h1>
-                  <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">
                     실시간 팀 매칭 시스템
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1.5 border text-sm">
+              <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+                <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1.5 border text-sm shadow-sm">
                   <button
                     onClick={() => updateSession({ courtsCount: Math.max(1, (state.session?.courtsCount || 4) - 1) })}
-                    className="size-6 rounded bg-white border hover:bg-gray-50 flex items-center justify-center transition-colors"
+                    className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
                   >
-                    −
+                    <span className="text-base md:text-lg">−</span>
                   </button>
-                  <span className="text-xs font-semibold min-w-[3rem] text-center">
+                  <span className="text-[10px] md:text-xs font-semibold min-w-[2.5rem] md:min-w-[3rem] text-center">
                     코트 {state.session?.courtsCount || 4}
                   </span>
                   <button
                     onClick={() => updateSession({ courtsCount: Math.min(8, (state.session?.courtsCount || 4) + 1) })}
-                    className="size-6 rounded bg-white border hover:bg-gray-50 flex items-center justify-center transition-colors"
+                    className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
                   >
-                    +
+                    <span className="text-base md:text-lg">+</span>
                   </button>
                 </div>
-                <div className="px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-200">
-                  <span className="text-xs font-medium text-blue-700">4인팀</span>
+                <div className="px-2.5 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
+                  <span className="text-[10px] md:text-xs font-semibold text-blue-700">4인팀</span>
                 </div>
                 <button
                   onClick={handleAutoMatch}
-                  className="px-3 py-1.5 md:px-5 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-semibold shadow-md hover:shadow-lg transition-all text-xs md:text-sm"
+                  className="px-3 py-1.5 md:px-5 md:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 active:scale-95 font-semibold shadow-md hover:shadow-lg transition-all text-[11px] md:text-sm touch-manipulation"
                 >
                   🎯 팀 매칭
                 </button>
                 <button
                   onClick={resetSession}
-                  className="px-3 py-1.5 md:px-4 md:py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors text-xs md:text-sm"
+                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation"
                 >
                   초기화
                 </button>
@@ -229,17 +229,20 @@ export default function App() {
           </div>
         </header>
 
-        <div className="container mx-auto px-3 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
+        <div className="container mx-auto px-3 md:px-6 py-3 md:py-5 pb-6 md:pb-8 space-y-3 md:space-y-5">
           {/* Courts Section */}
-          <div className="bg-white rounded-lg border shadow-sm">
-            <div className="px-4 md:px-6 py-3 md:py-4 border-b flex items-center justify-between">
-              <h2 className="font-semibold text-base md:text-lg">코트 현황</h2>
-              <span className="text-xs md:text-sm text-muted-foreground">
-                {state.courts.filter(c => c.status === 'occupied').length}/{state.courts.length} 사용
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-emerald-50/50 to-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="size-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <h2 className="font-semibold text-sm md:text-base">코트 현황</h2>
+              </div>
+              <span className="text-[10px] md:text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
+                {state.courts.filter(c => c.status === 'occupied').length}/{state.courts.length} 사용중
               </span>
             </div>
-            <div className="p-3 md:p-6">
-              <div className={`grid gap-3 md:gap-4 ${getCourtGridCols(state.session?.courtsCount || 4)}`}>
+            <div className="p-2.5 md:p-5">
+              <div className={`grid gap-2.5 md:gap-4 ${getCourtGridCols(state.session?.courtsCount || 4)}`}>
                 {state.courts.map((court) => {
                   const team = court.currentTeamId
                     ? state.teams.find((t) => t.id === court.currentTeamId) || null
@@ -261,17 +264,17 @@ export default function App() {
           </div>
 
           {/* Bottom Section: Participants and Queued Teams */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5 pb-4 md:pb-6">
             {/* Left: Participant/Member Management */}
-            <div className="bg-white rounded-lg border shadow-sm order-2 lg:order-1">
+            <div className="bg-white rounded-xl border shadow-sm order-2 lg:order-1">
               <Tabs defaultValue="players" className="w-full">
-                <div className="px-4 md:px-6 py-3 md:py-4 border-b">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="players" className="text-sm">참가자 관리</TabsTrigger>
-                    <TabsTrigger value="members" className="text-sm">모임원 관리</TabsTrigger>
+                <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-blue-50/50 to-white">
+                  <TabsList className="grid w-full grid-cols-2 h-9 md:h-10">
+                    <TabsTrigger value="players" className="text-xs md:text-sm">참가자 관리</TabsTrigger>
+                    <TabsTrigger value="members" className="text-xs md:text-sm">모임원 관리</TabsTrigger>
                   </TabsList>
                 </div>
-                <div className="p-3 md:p-6">
+                <div className="p-3 md:p-5">
                   <TabsContent value="players" className="mt-0">
                     <PlayerPanel
                       players={state.players}
@@ -300,14 +303,17 @@ export default function App() {
             </div>
 
             {/* Right: Game Queue */}
-            <div className="bg-white rounded-lg border shadow-sm order-1 lg:order-2">
-              <div className="px-4 md:px-6 py-3 md:py-4 border-b flex items-center justify-between">
-                <h2 className="font-semibold text-base md:text-lg">게임 대기중</h2>
-                <span className="text-xs md:text-sm text-muted-foreground">
+            <div className="bg-white rounded-xl border shadow-sm order-1 lg:order-2">
+              <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-orange-50/50 to-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="size-2 rounded-full bg-orange-500 animate-pulse"></div>
+                  <h2 className="font-semibold text-sm md:text-base">게임 대기중</h2>
+                </div>
+                <span className="text-[10px] md:text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
                   {state.teams.filter(t => t.state === 'queued').length}팀
                 </span>
               </div>
-              <div className="p-3 md:p-6">
+              <div className="p-3 md:p-5">
                 <MatchingArea
                   teams={state.teams}
                   courts={state.courts}
