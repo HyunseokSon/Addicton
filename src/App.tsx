@@ -28,11 +28,11 @@ export default function App() {
     state,
     updateSession,
     addPlayer,
-    updatePlayer,
     deletePlayer,
     updatePlayerState,
     performAutoMatch,
     startGame,
+    startAllQueuedGames,
     endGame,
     toggleCourtPause,
     updateCourtTimer,
@@ -44,6 +44,7 @@ export default function App() {
     updateMember,
     deleteMember,
     addMemberAsPlayer,
+    addMembersAsPlayers,
     syncFromSupabase,
   } = useGameState();
 
@@ -94,6 +95,21 @@ export default function App() {
     startGame(teamId, courtId);
     toast.success('게임 시작', {
       description: '타이머가 시작되었습니다.',
+    });
+  };
+
+  const handleStartAllQueuedGames = () => {
+    const availableCourts = state.courts.filter((c) => c.status === 'available');
+    if (availableCourts.length === 0) {
+      toast.error('코트 부족', {
+        description: '사용 가능한 코트가 없습니다.',
+      });
+      return;
+    }
+
+    startAllQueuedGames();
+    toast.success('모든 게임 시작', {
+      description: '대기중인 모든 팀의 타이머가 시작되었습니다.',
     });
   };
 
@@ -356,7 +372,7 @@ export default function App() {
                       players={state.players}
                       teams={state.teams}
                       onAddPlayer={addPlayer}
-                      onUpdatePlayer={updatePlayer}
+                      onUpdatePlayer={deletePlayer}
                       onUpdatePlayerState={updatePlayerState}
                       onDeletePlayer={deletePlayer}
                       onAdjustGameCount={adjustGameCount}
@@ -374,6 +390,7 @@ export default function App() {
                       onUpdateMember={updateMember}
                       onDeleteMember={deleteMember}
                       onAddMemberAsPlayer={addMemberAsPlayer}
+                      addMembersAsPlayers={addMembersAsPlayers}
                       readOnly={!isAdmin}
                     />
                   </TabsContent>
@@ -398,6 +415,7 @@ export default function App() {
                   courts={state.courts}
                   players={state.players}
                   onStartGame={handleStartGame}
+                  onStartAllQueuedGames={handleStartAllQueuedGames}
                   onEndGame={handleEndGame}
                   onToggleCourtPause={toggleCourtPause}
                   onUpdateCourtTimer={updateCourtTimer}

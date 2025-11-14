@@ -621,6 +621,94 @@ export function useGameState() {
     }
   }, [addAuditLog, state.courts]);
 
+  const startAllQueuedGames = useCallback(async () => {
+    try {
+      const teamsToUpdate: { teamId: string; courtId: string }[] = [];
+      const playersToUpdate: string[] = [];
+      
+      setState((prev) => {
+        const queuedTeams = prev.teams.filter((t) => t.state === 'queued');
+        const availableCourts = prev.courts.filter((c) => c.status === 'available');
+        
+        if (queuedTeams.length === 0 || availableCourts.length === 0) {
+          return prev;
+        }
+        
+        // Match teams to courts (up to the number of available courts)
+        const teamsToStart = queuedTeams.slice(0, availableCourts.length);
+        
+        let updatedTeams = [...prev.teams];
+        let updatedCourts = [...prev.courts];
+        let updatedPlayers = [...prev.players];
+        
+        teamsToStart.forEach((team, index) => {
+          const court = availableCourts[index];
+          
+          // Track for Supabase update
+          teamsToUpdate.push({ teamId: team.id, courtId: court.id });
+          playersToUpdate.push(...team.playerIds);
+          
+          // Update team
+          updatedTeams = updatedTeams.map((t) =>
+            t.id === team.id
+              ? { ...t, state: 'playing' as const, assignedCourtId: court.id, startedAt: new Date() }
+              : t
+          );
+          
+          // Update court
+          updatedCourts = updatedCourts.map((c) =>
+            c.id === court.id
+              ? { ...c, status: 'occupied' as const, currentTeamId: team.id, timerMs: 0 }
+              : c
+          );
+          
+          // Update players
+          updatedPlayers = updatedPlayers.map((p) =>
+            team.playerIds.includes(p.id) ? { ...p, state: 'playing' as const } : p
+          );
+        });
+        
+        return {
+          ...prev,
+          teams: updatedTeams,
+          courts: updatedCourts,
+          players: updatedPlayers,
+        };
+      });
+      
+      // Batch update teams in Supabase
+      if (teamsToUpdate.length > 0) {
+        await Promise.all(
+          teamsToUpdate.map(({ teamId, courtId }) =>
+            teamsApi.update(teamId, {
+              state: 'playing',
+              assignedCourtId: courtId,
+              startedAt: new Date(),
+            })
+          )
+        );
+        console.log(`✅ Batch started ${teamsToUpdate.length} teams in Supabase`);
+      }
+      
+      // Batch update players in Supabase
+      if (playersToUpdate.length > 0) {
+        const uniquePlayerIds = [...new Set(playersToUpdate)];
+        await Promise.all(
+          uniquePlayerIds.map((playerId) =>
+            playersApi.update(playerId, { state: 'playing' })
+          )
+        );
+        console.log(`✅ Updated ${uniquePlayerIds.length} players to playing state in Supabase`);
+      }
+      
+      addAuditLog('batch_games_started', { count: teamsToUpdate.length });
+      return teamsToUpdate.length;
+    } catch (error) {
+      console.error('Failed to batch start games:', error);
+      return 0;
+    }
+  }, [addAuditLog]);
+
   const endGame = useCallback(async (courtId: string) => {
     const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
     let teamToDelete: string | null = null;
@@ -958,43 +1046,14 @@ export function useGameState() {
     }
   }, [addAuditLog]);
 
-  const addMemberAsPlayer = useCallback(async (memberId: string) => {
-    try {
-      const member = state.members.find((m) => m.id === memberId);
-      if (!member) return;
-      
-      // Check for duplicate names
-      const existing = state.players.filter((p) => p.name.startsWith(member.name));
-      const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
-      
-      const player: Player = {
-        id: `player-${Date.now()}-${Math.random()}`,
-        name: finalName,
-        state: 'waiting',
-        gender: member.gender,
-        rank: member.rank,
-        gameCount: 0,
-        lastGameEndAt: null,
-        createdAt: new Date(),
-      };
-      
-      // Save to Supabase first
-      await playersApi.add(player);
-      
-      // Update local state
-      setState((prev) => ({
-        ...prev,
-        players: [...prev.players, player],
-      }));
-      addAuditLog('member_added_as_player', { memberId });
-    } catch (error) {
-      console.error('Failed to add player to Supabase:', error);
-      // Still update local state even if API fails
-      setState((prev) => {
-        const member = prev.members.find((m) => m.id === memberId);
-        if (!member) return prev;
-        
-        const existing = prev.players.filter((p) => p.name.startsWith(member.name));
+  const addMemberAsPlayer = useCallback((memberId: string) => {
+    const member = state.members.find(m => m.id === memberId);
+    if (member) {
+      // Check if member already registered
+      const existingPlayer = state.players.find(p => p.name.startsWith(member.name));
+      if (!existingPlayer) {
+        // Create unique name if duplicate exists
+        const existing = state.players.filter((p) => p.name.startsWith(member.name));
         const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
         
         const player: Player = {
@@ -1008,14 +1067,75 @@ export function useGameState() {
           createdAt: new Date(),
         };
         
-        return {
-          ...prev,
-          players: [...prev.players, player],
-        };
-      });
-      addAuditLog('member_added_as_player', { memberId });
+        setState((prev) => {
+          return {
+            ...prev,
+            players: [...prev.players, player],
+          };
+        });
+        addAuditLog('member_added_as_player', { memberId });
+      }
     }
   }, [addAuditLog, state.members, state.players]);
+
+  const addMembersAsPlayers = useCallback(async (memberIds: string[]) => {
+    try {
+      const newPlayers: Player[] = [];
+      
+      setState((prev) => {
+        const playersToAdd: Player[] = [];
+        
+        memberIds.forEach(memberId => {
+          const member = prev.members.find(m => m.id === memberId);
+          if (member) {
+            // Check if member already registered
+            const existingPlayer = prev.players.find(p => p.name.startsWith(member.name));
+            if (!existingPlayer) {
+              // Create unique name if duplicate exists
+              const existing = [...prev.players, ...playersToAdd].filter((p) => 
+                p.name.startsWith(member.name)
+              );
+              const finalName = existing.length > 0 ? `${member.name}(${existing.length + 1})` : member.name;
+              
+              const player: Player = {
+                id: `player-${Date.now()}-${Math.random()}-${memberId}`,
+                name: finalName,
+                state: 'waiting',
+                gender: member.gender,
+                rank: member.rank,
+                gameCount: 0,
+                lastGameEndAt: null,
+                createdAt: new Date(),
+              };
+              
+              playersToAdd.push(player);
+              newPlayers.push(player);
+            }
+          }
+        });
+        
+        return {
+          ...prev,
+          players: [...prev.players, ...playersToAdd],
+        };
+      });
+      
+      // Batch save to Supabase
+      if (newPlayers.length > 0) {
+        await Promise.all(
+          newPlayers.map(player => playersApi.add(player))
+        );
+        console.log(`✅ Batch added ${newPlayers.length} players to Supabase`);
+      }
+      
+      addAuditLog('batch_members_added_as_players', { count: newPlayers.length });
+      return newPlayers.length;
+    } catch (error) {
+      console.error('Failed to batch add players to Supabase:', error);
+      addAuditLog('batch_members_added_as_players', { count: 0, error: String(error) });
+      return 0;
+    }
+  }, [addAuditLog, state.members]);
 
   const syncFromSupabase = useCallback(async () => {
     try {
@@ -1103,6 +1223,7 @@ export function useGameState() {
     updatePlayerState,
     performAutoMatch,
     startGame,
+    startAllQueuedGames,
     endGame,
     toggleCourtPause,
     updateCourtTimer,
@@ -1114,6 +1235,7 @@ export function useGameState() {
     updateMember,
     deleteMember,
     addMemberAsPlayer,
+    addMembersAsPlayers,
     syncFromSupabase,
   };
 }

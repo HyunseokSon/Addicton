@@ -7,6 +7,8 @@ export const membersApi = {
   // Get all members
   async getAll(): Promise<Member[]> {
     try {
+      console.log('🔗 Fetching members from:', `${API_BASE}/members`);
+      
       const response = await fetch(`${API_BASE}/members`, {
         method: 'GET',
         headers: {
@@ -16,19 +18,25 @@ export const membersApi = {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('Failed to get members:', error);
-        throw new Error(error.error || 'Failed to get members');
+        const errorText = await response.text();
+        console.error('❌ Failed to get members - HTTP', response.status, ':', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('✅ Successfully fetched members:', data.members?.length || 0);
+      
       // Convert date strings back to Date objects
       return (data.members || []).map((m: any) => ({
         ...m,
         createdAt: new Date(m.createdAt),
       }));
     } catch (error) {
-      console.error('Error getting members:', error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('🌐 Network error - Edge Function may not be deployed:', error);
+        throw new Error('서버에 연결할 수 없습니다. Edge Function이 배포되었는지 확인하세요.');
+      }
+      console.error('❌ Error getting members:', error);
       throw error;
     }
   },
