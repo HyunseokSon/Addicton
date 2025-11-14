@@ -224,11 +224,6 @@ export default function App() {
           <div className="container mx-auto px-3 md:px-6 py-2.5 md:py-3.5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
               <div className="flex items-center gap-2 md:gap-3">
-                <img 
-                  src={addictonLogo} 
-                  alt="Addicton Logo" 
-                  className="size-10 md:size-14 object-contain rounded-lg shadow-sm" 
-                />
                 <div>
                   <h1 className="text-base md:text-xl bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
                     {state.session?.name || '에딕턴 게임 매칭'}

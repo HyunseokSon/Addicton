@@ -162,7 +162,6 @@
     --tracking-widest: .1em;
     --radius-xs: .125rem;
     --radius-2xl: 1rem;
-    --drop-shadow-lg: 0 4px 4px #00000026;
     --animate-spin: spin 1s linear infinite;
     --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;
     --blur-sm: 8px;
@@ -838,11 +837,6 @@
   .size-16 {
     width: calc(var(--spacing) * 16);
     height: calc(var(--spacing) * 16);
-  }
-
-  .size-20 {
-    width: calc(var(--spacing) * 20);
-    height: calc(var(--spacing) * 20);
   }
 
   .h-2 {
@@ -1736,10 +1730,6 @@
     fill: currentColor;
   }
 
-  .object-contain {
-    object-fit: contain;
-  }
-
   .p-0 {
     padding: calc(var(--spacing) * 0);
   }
@@ -2167,12 +2157,6 @@
   .outline {
     outline-style: var(--tw-outline-style);
     outline-width: 1px;
-  }
-
-  .drop-shadow-lg {
-    --tw-drop-shadow-size: drop-shadow(0 4px 4px var(--tw-drop-shadow-color, #00000026));
-    --tw-drop-shadow: drop-shadow(var(--drop-shadow-lg));
-    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
   .filter {
@@ -2951,12 +2935,6 @@
   }
 
   @media (width >= 48rem) {
-    .md\:mb-6 {
-      margin-bottom: calc(var(--spacing) * 6);
-    }
-  }
-
-  @media (width >= 48rem) {
     .md\:mb-12 {
       margin-bottom: calc(var(--spacing) * 12);
     }
@@ -3029,20 +3007,6 @@
     .md\:size-12 {
       width: calc(var(--spacing) * 12);
       height: calc(var(--spacing) * 12);
-    }
-  }
-
-  @media (width >= 48rem) {
-    .md\:size-14 {
-      width: calc(var(--spacing) * 14);
-      height: calc(var(--spacing) * 14);
-    }
-  }
-
-  @media (width >= 48rem) {
-    .md\:size-28 {
-      width: calc(var(--spacing) * 28);
-      height: calc(var(--spacing) * 28);
     }
   }
 

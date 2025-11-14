@@ -133,11 +133,6 @@ export function RoleSelection({ onSelectRole }: RoleSelectionProps) {
       <div className="w-full max-w-2xl">
         {/* Logo and Title */}
         <div className="text-center mb-8 md:mb-12">
-          <img 
-            src={addictonLogo} 
-            alt="Addicton Logo" 
-            className="size-20 md:size-28 object-contain mx-auto mb-4 md:mb-6 drop-shadow-lg" 
-          />
           <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent mb-2">
             에딕턴 게임 매칭
           </h1>
