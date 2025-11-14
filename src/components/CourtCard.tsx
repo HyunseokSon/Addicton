@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Court, Team, Player } from '../types/index';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -29,14 +29,23 @@ export function CourtCard({
   onEndGame,
   onUpdateTimer,
 }: CourtCardProps) {
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Update current time every second for accurate timer display
   useEffect(() => {
-    if (court.status === 'occupied' && !court.isPaused) {
+    if (court.status === 'occupied' && !court.isPaused && team?.startedAt) {
       const interval = setInterval(() => {
-        onUpdateTimer(1000);
+        setCurrentTime(Date.now());
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [court.status, court.isPaused, onUpdateTimer]);
+  }, [court.status, court.isPaused, team?.startedAt]);
+
+  // Calculate elapsed time based on startedAt (more accurate than cumulative timerMs)
+  const getElapsedTime = (): number => {
+    if (!team?.startedAt) return 0;
+    return currentTime - new Date(team.startedAt).getTime();
+  };
 
   const teamPlayers = team ? players.filter((p) => team.playerIds.includes(p.id)) : [];
 
@@ -62,7 +71,7 @@ export function CourtCard({
           </div>
           <Badge variant="secondary" className="font-mono text-[10px] md:text-xs px-1.5 md:px-2.5 py-0.5 md:py-1 bg-white border border-emerald-200 shadow-sm">
             <Clock className="size-2.5 md:size-3 mr-0.5 md:mr-1" />
-            {formatTime(court.timerMs)}
+            {formatTime(getElapsedTime())}
           </Badge>
         </div>
 

@@ -241,16 +241,11 @@ export function useGameState() {
               );
               
               if (playingTeam) {
-                // Calculate elapsed time if game has started
-                const elapsedMs = playingTeam.startedAt 
-                  ? Date.now() - new Date(playingTeam.startedAt).getTime()
-                  : 0;
-                
                 return {
                   ...court,
                   status: 'occupied' as const,
                   currentTeamId: playingTeam.id,
-                  timerMs: elapsedMs,
+                  timerMs: 0, // Not used anymore, timer calculated from startedAt
                   isPaused: false,
                 };
               }
