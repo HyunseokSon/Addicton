@@ -33,6 +33,7 @@ interface PlayerPanelProps {
   onReturnToWaiting: (playerId: string, teamId: string) => void;
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
   onDeleteAllWaitingPlayers?: () => void;
+  readOnly?: boolean;
 }
 
 const STATE_LABELS: Record<PlayerState, string> = {
@@ -62,6 +63,7 @@ export function PlayerPanel({
   onReturnToWaiting,
   onSwapPlayer,
   onDeleteAllWaitingPlayers,
+  readOnly,
 }: PlayerPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -114,7 +116,7 @@ export function PlayerPanel({
               {waitingPlayers.length}명
             </Badge>
           </div>
-          {waitingPlayers.length > 0 && onDeleteAllWaitingPlayers && (
+          {waitingPlayers.length > 0 && onDeleteAllWaitingPlayers && !readOnly && (
             <Button
               size="sm"
               variant="ghost"
@@ -147,6 +149,7 @@ export function PlayerPanel({
                 onUpdatePlayer={onUpdatePlayer}
                 getNextState={getNextState}
                 onSwapPlayer={onSwapPlayer}
+                readOnly={readOnly}
               />
             ))
           )}
@@ -246,6 +249,7 @@ interface WaitingPlayerCardProps {
   onUpdatePlayer: (id: string, updates: Partial<Player>) => void;
   getNextState: (current: PlayerState) => PlayerState;
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
+  readOnly?: boolean;
 }
 
 function WaitingPlayerCard({
@@ -263,6 +267,7 @@ function WaitingPlayerCard({
   onUpdatePlayer,
   getNextState,
   onSwapPlayer,
+  readOnly,
 }: WaitingPlayerCardProps) {
   const [showHistory, setShowHistory] = useState(false);
   
@@ -270,15 +275,18 @@ function WaitingPlayerCard({
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.WAITING_PLAYER,
     item: { playerId: player.id },
+    canDrag: !readOnly,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }), [player.id]);
+  }), [player.id, readOnly]);
 
   return (
     <div
-      ref={drag}
-      className={`bg-white border border-gray-200 rounded-lg p-2 md:p-3 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${
+      ref={readOnly ? null : drag}
+      className={`bg-white border border-gray-200 rounded-lg p-2 md:p-3 hover:shadow-md transition-all ${
+        readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+      } ${
         isDragging ? 'opacity-50 scale-95' : ''
       }`}
     >
@@ -319,53 +327,59 @@ function WaitingPlayerCard({
               <Badge className={`text-xs ${STATE_COLORS[player.state]}`}>
                 {STATE_LABELS[player.state]}
               </Badge>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-5 w-5 p-0 hover:bg-gray-100"
-                  >
-                    <ChevronDown className="size-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'waiting')}>
-                    <span className="text-xs">대기</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'priority')}>
-                    <span className="text-xs">우선대기</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'resting')}>
-                    <span className="text-xs">휴식</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {!readOnly && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 w-5 p-0 hover:bg-gray-100"
+                    >
+                      <ChevronDown className="size-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'waiting')}>
+                      <span className="text-xs">대기</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'priority')}>
+                      <span className="text-xs">우선대기</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onUpdatePlayerState(player.id, 'resting')}>
+                      <span className="text-xs">휴식</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onAdjustGameCount(player.id, -1)}
-                disabled={player.gameCount <= 0}
-                className="size-6 p-0 hover:bg-red-50"
-                title="게임 수 감소"
-              >
-                <Minus className="size-3" />
-              </Button>
-              <span className="text-xs text-gray-700 mx-1 font-mono min-w-[28px] text-center">{player.gameCount}회</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onAdjustGameCount(player.id, 1)}
-                className="size-6 p-0 hover:bg-green-50"
-                title="게임 수 증가"
-              >
-                <Plus className="size-3" />
-              </Button>
-            </div>
+            {!readOnly ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onAdjustGameCount(player.id, -1)}
+                  disabled={player.gameCount <= 0}
+                  className="size-6 p-0 hover:bg-red-50"
+                  title="게임 수 감소"
+                >
+                  <Minus className="size-3" />
+                </Button>
+                <span className="text-xs text-gray-700 mx-1 font-mono min-w-[28px] text-center">{player.gameCount}회</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onAdjustGameCount(player.id, 1)}
+                  className="size-6 p-0 hover:bg-green-50"
+                  title="게임 수 증가"
+                >
+                  <Plus className="size-3" />
+                </Button>
+              </div>
+            ) : (
+              <span className="text-xs text-gray-700 font-mono">{player.gameCount}회</span>
+            )}
             <div className="flex items-center gap-1">
               <Button
                 size="sm"
@@ -377,14 +391,16 @@ function WaitingPlayerCard({
               >
                 <Info className="size-3 text-purple-600" />
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onDeletePlayer(player.id)}
-                className="size-7 p-0 hover:bg-red-50"
-              >
-                <Trash2 className="size-3 text-red-600" />
-              </Button>
+              {!readOnly && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onDeletePlayer(player.id)}
+                  className="size-7 p-0 hover:bg-red-50"
+                >
+                  <Trash2 className="size-3 text-red-600" />
+                </Button>
+              )}
             </div>
           </div>
         </div>

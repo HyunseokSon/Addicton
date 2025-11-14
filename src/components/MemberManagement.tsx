@@ -20,6 +20,7 @@ interface MemberManagementProps {
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
   onDeleteMember: (id: string) => void;
   onAddMemberAsPlayer: (memberId: string) => void;
+  readOnly?: boolean;
 }
 
 export function MemberManagement({
@@ -29,6 +30,7 @@ export function MemberManagement({
   onUpdateMember,
   onDeleteMember,
   onAddMemberAsPlayer,
+  readOnly,
 }: MemberManagementProps) {
   const [newName, setNewName] = useState('');
   const [newGender, setNewGender] = useState<Gender | ''>('');
@@ -104,54 +106,56 @@ export function MemberManagement({
   return (
     <div className="space-y-4 md:space-y-5">
       {/* Add Member Form */}
-      <div className="bg-gradient-to-br from-blue-50/50 to-blue-50/30 border border-blue-200 rounded-xl p-3 md:p-4 shadow-sm">
-        <h3 className="font-semibold text-xs md:text-sm text-gray-700 mb-2.5 md:mb-3">모임원 추가</h3>
-        <div className="space-y-2">
-          <Input
-            type="text"
-            placeholder="이름 입력"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
-            className="w-full h-9 md:h-10 text-xs md:text-sm"
-          />
-          <div className="flex gap-2">
-            <Select
-              value={newGender}
-              onValueChange={(value) => setNewGender(value as Gender)}
-            >
-              <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                <SelectValue placeholder="성별 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="남">남</SelectItem>
-                <SelectItem value="녀">녀</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={newRank}
-              onValueChange={(value) => setNewRank(value as Rank)}
-            >
-              <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                <SelectValue placeholder="급수 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="S">S</SelectItem>
-                <SelectItem value="A">A</SelectItem>
-                <SelectItem value="B">B</SelectItem>
-                <SelectItem value="C">C</SelectItem>
-                <SelectItem value="D">D</SelectItem>
-                <SelectItem value="E">E</SelectItem>
-                <SelectItem value="F">F</SelectItem>
-              </SelectContent>
-            </Select>
+      {!readOnly && (
+        <div className="bg-gradient-to-br from-blue-50/50 to-blue-50/30 border border-blue-200 rounded-xl p-3 md:p-4 shadow-sm">
+          <h3 className="font-semibold text-xs md:text-sm text-gray-700 mb-2.5 md:mb-3">모임원 추가</h3>
+          <div className="space-y-2">
+            <Input
+              type="text"
+              placeholder="이름 입력"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+              className="w-full h-9 md:h-10 text-xs md:text-sm"
+            />
+            <div className="flex gap-2">
+              <Select
+                value={newGender}
+                onValueChange={(value) => setNewGender(value as Gender)}
+              >
+                <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
+                  <SelectValue placeholder="성별 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="남">남</SelectItem>
+                  <SelectItem value="녀">녀</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={newRank}
+                onValueChange={(value) => setNewRank(value as Rank)}
+              >
+                <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
+                  <SelectValue placeholder="급수 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="S">S</SelectItem>
+                  <SelectItem value="A">A</SelectItem>
+                  <SelectItem value="B">B</SelectItem>
+                  <SelectItem value="C">C</SelectItem>
+                  <SelectItem value="D">D</SelectItem>
+                  <SelectItem value="E">E</SelectItem>
+                  <SelectItem value="F">F</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleAdd} className="w-full h-9 md:h-10 bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation">
+              <UserPlus className="size-3.5 md:size-4 mr-2" />
+              모임원 추가
+            </Button>
           </div>
-          <Button onClick={handleAdd} className="w-full h-9 md:h-10 bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation">
-            <UserPlus className="size-3.5 md:size-4 mr-2" />
-            모임원 추가
-          </Button>
         </div>
-      </div>
+      )}
 
       {/* Members List */}
       <div>
@@ -291,40 +295,44 @@ export function MemberManagement({
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-0.5 md:gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStartEdit(member)}
-                            className="size-7 md:size-8 p-0 hover:bg-blue-50 active:scale-90 touch-manipulation"
-                            title="수정"
-                          >
-                            <Edit2 className="size-3 md:size-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onDeleteMember(member.id)}
-                            className="size-7 md:size-8 p-0 hover:bg-red-50 active:scale-90 touch-manipulation"
-                            title="삭제"
-                          >
-                            <Trash2 className="size-3 md:size-3.5 text-red-600" />
-                          </Button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex items-center gap-0.5 md:gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleStartEdit(member)}
+                              className="size-7 md:size-8 p-0 hover:bg-blue-50 active:scale-90 touch-manipulation"
+                              title="수정"
+                            >
+                              <Edit2 className="size-3 md:size-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteMember(member.id)}
+                              className="size-7 md:size-8 p-0 hover:bg-red-50 active:scale-90 touch-manipulation"
+                              title="삭제"
+                            >
+                              <Trash2 className="size-3 md:size-3.5 text-red-600" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       {isMemberRegistered(member.name) ? (
                         <div className="w-full px-2.5 md:px-3 py-1.5 md:py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
                           <span className="text-[10px] md:text-xs text-emerald-700 font-medium">✓ 참가 등록 완료</span>
                         </div>
                       ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => onAddMemberAsPlayer(member.id)}
-                          className="w-full h-8 md:h-9 bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-sm text-[10px] md:text-xs touch-manipulation"
-                        >
-                          <UserCheck className="size-3 md:size-3.5 mr-1.5 md:mr-2" />
-                          참가 등록
-                        </Button>
+                        !readOnly && (
+                          <Button
+                            size="sm"
+                            onClick={() => onAddMemberAsPlayer(member.id)}
+                            className="w-full h-8 md:h-9 bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-sm text-[10px] md:text-xs touch-manipulation"
+                          >
+                            <UserCheck className="size-3 md:size-3.5 mr-1.5 md:mr-2" />
+                            참가 등록
+                          </Button>
+                        )
                       )}
                     </div>
                   )}

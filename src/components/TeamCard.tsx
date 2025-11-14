@@ -13,9 +13,10 @@ interface TeamCardProps {
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
   onSwapBetweenTeams?: (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => void;
   availableCourtCount?: number;
+  readOnly?: boolean;
 }
 
-export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlayer, onSwapBetweenTeams, availableCourtCount }: TeamCardProps) {
+export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlayer, onSwapBetweenTeams, availableCourtCount, readOnly }: TeamCardProps) {
   const teamPlayers = players.filter((p) => team.playerIds.includes(p.id));
   
   const handleSwap = (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
@@ -34,7 +35,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
             <span className="font-semibold text-sm md:text-base">{team.name}</span>
           </div>
           <div className="flex gap-1.5 md:gap-2">
-            {team.state === 'queued' && onStartGame && (
+            {!readOnly && team.state === 'queued' && onStartGame && (
               <Button 
                 size="sm" 
                 onClick={onStartGame} 
@@ -45,7 +46,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                 게임 시작
               </Button>
             )}
-            {onDeleteTeam && (
+            {!readOnly && onDeleteTeam && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -78,6 +79,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                     index={idx}
                     onSwap={handleSwap}
                     onSwapBetweenTeams={onSwapBetweenTeams}
+                    readOnly={readOnly}
                   />
                 </div>
               ))}
@@ -161,6 +163,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                 index={idx}
                 onSwap={handleSwap}
                 onSwapBetweenTeams={onSwapBetweenTeams}
+                readOnly={readOnly}
               />
             ))}
             {/* Fill empty slots */}

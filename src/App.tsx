@@ -11,9 +11,19 @@ import { CourtCard } from './components/CourtCard';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { RefreshCw, LogOut, KeyRound } from 'lucide-react';
 import addictonLogo from 'figma:asset/3326f21ff08f9b7816589961d903cd0071089100.png';
+import { useState } from 'react';
+import { RoleSelection } from './components/RoleSelection';
+import { PasswordChangeDialog } from './components/PasswordChangeDialog';
+
+type UserRole = 'admin' | 'member' | null;
 
 export default function App() {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>(null);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  
   const {
     state,
     updateSession,
@@ -34,6 +44,7 @@ export default function App() {
     updateMember,
     deleteMember,
     addMemberAsPlayer,
+    syncFromSupabase,
   } = useGameState();
 
   const handleAutoMatch = () => {
@@ -177,9 +188,25 @@ export default function App() {
     });
   };
 
+  const handleSyncFromSupabase = async () => {
+    setIsSyncing(true);
+    await syncFromSupabase();
+    setIsSyncing(false);
+    toast.success('동기화 완료', {
+      description: 'Supabase에서 최신 데이터를 가져왔습니다.',
+    });
+  };
+
   if (!state.session) {
     return null;
   }
+
+  // Show role selection screen if no role is selected
+  if (!userRole) {
+    return <RoleSelection onSelectRole={setUserRole} />;
+  }
+
+  const isAdmin = userRole === 'admin';
 
   // Determine grid columns based on court count
   const getCourtGridCols = (count: number) => {
@@ -212,37 +239,70 @@ export default function App() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-                <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1.5 border text-sm shadow-sm">
-                  <button
-                    onClick={() => updateSession({ courtsCount: Math.max(1, (state.session?.courtsCount || 4) - 1) })}
-                    className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
-                  >
-                    <span className="text-base md:text-lg">−</span>
-                  </button>
-                  <span className="text-[10px] md:text-xs font-semibold min-w-[2.5rem] md:min-w-[3rem] text-center">
-                    코트 {state.session?.courtsCount || 4}
-                  </span>
-                  <button
-                    onClick={() => updateSession({ courtsCount: Math.min(8, (state.session?.courtsCount || 4) + 1) })}
-                    className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
-                  >
-                    <span className="text-base md:text-lg">+</span>
-                  </button>
-                </div>
-                <div className="px-2.5 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
-                  <span className="text-[10px] md:text-xs font-semibold text-blue-700">4인팀</span>
-                </div>
+                {isAdmin && (
+                  <>
+                    <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1.5 border text-sm shadow-sm">
+                      <button
+                        onClick={() => updateSession({ courtsCount: Math.max(1, (state.session?.courtsCount || 4) - 1) })}
+                        className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
+                      >
+                        <span className="text-base md:text-lg">−</span>
+                      </button>
+                      <span className="text-[10px] md:text-xs font-semibold min-w-[2.5rem] md:min-w-[3rem] text-center">
+                        코트 {state.session?.courtsCount || 4}
+                      </span>
+                      <button
+                        onClick={() => updateSession({ courtsCount: Math.min(8, (state.session?.courtsCount || 4) + 1) })}
+                        className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
+                      >
+                        <span className="text-base md:text-lg">+</span>
+                      </button>
+                    </div>
+                    <div className="px-2.5 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
+                      <span className="text-[10px] md:text-xs font-semibold text-blue-700">4인팀</span>
+                    </div>
+                    <button
+                      onClick={handleAutoMatch}
+                      className="px-3 py-1.5 md:px-5 md:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 active:scale-95 font-semibold shadow-md hover:shadow-lg transition-all text-[11px] md:text-sm touch-manipulation"
+                    >
+                      🎯 팀 매칭
+                    </button>
+                    <button
+                      onClick={resetSession}
+                      className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation"
+                    >
+                      초기화
+                    </button>
+                    <button
+                      onClick={() => setShowPasswordChange(true)}
+                      className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation flex items-center gap-1.5"
+                    >
+                      <KeyRound className="size-4 md:size-5" />
+                      <span className="hidden sm:inline">비밀번호 변경</span>
+                    </button>
+                  </>
+                )}
+                {!isAdmin && (
+                  <div className="px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200 shadow-sm">
+                    <span className="text-[10px] md:text-xs font-semibold text-emerald-700">회원 (조회 전용)</span>
+                  </div>
+                )}
                 <button
-                  onClick={handleAutoMatch}
-                  className="px-3 py-1.5 md:px-5 md:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 active:scale-95 font-semibold shadow-md hover:shadow-lg transition-all text-[11px] md:text-sm touch-manipulation"
+                  onClick={handleSyncFromSupabase}
+                  disabled={isSyncing}
+                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                  title="Supabase에서 동기화"
                 >
-                  🎯 팀 매칭
+                  <RefreshCw className={`size-4 md:size-5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{isSyncing ? '동기화 중...' : '새로고침'}</span>
                 </button>
                 <button
-                  onClick={resetSession}
-                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation"
+                  onClick={() => setUserRole(null)}
+                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation flex items-center gap-1.5"
+                  title="역할 변경"
                 >
-                  초기화
+                  <LogOut className="size-4 md:size-5" />
+                  <span className="hidden sm:inline">로그아웃</span>
                 </button>
               </div>
             </div>
@@ -276,6 +336,7 @@ export default function App() {
                       onTogglePause={() => toggleCourtPause(court.id)}
                       onEndGame={() => handleEndGame(court.id)}
                       onUpdateTimer={(deltaMs) => updateCourtTimer(court.id, deltaMs)}
+                      readOnly={!isAdmin}
                     />
                   );
                 })}
@@ -307,6 +368,7 @@ export default function App() {
                       onReturnToWaiting={handleReturnToWaiting}
                       onSwapPlayer={handleSwapPlayer}
                       onDeleteAllWaitingPlayers={handleDeleteAllWaiting}
+                      readOnly={!isAdmin}
                     />
                   </TabsContent>
                   <TabsContent value="members" className="mt-0">
@@ -317,6 +379,7 @@ export default function App() {
                       onUpdateMember={updateMember}
                       onDeleteMember={deleteMember}
                       onAddMemberAsPlayer={addMemberAsPlayer}
+                      readOnly={!isAdmin}
                     />
                   </TabsContent>
                 </div>
@@ -346,6 +409,7 @@ export default function App() {
                   onDeleteTeam={deleteTeam}
                   onSwapPlayer={handleSwapPlayer}
                   onSwapBetweenTeams={handleSwapBetweenTeams}
+                  readOnly={!isAdmin}
                 />
               </div>
             </div>
@@ -353,6 +417,10 @@ export default function App() {
         </div>
 
         <Toaster position="bottom-right" duration={2000} />
+        <PasswordChangeDialog
+          open={showPasswordChange}
+          onOpenChange={setShowPasswordChange}
+        />
       </div>
     </DndProvider>
   );

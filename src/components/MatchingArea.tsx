@@ -12,8 +12,9 @@ interface MatchingAreaProps {
   onToggleCourtPause: (courtId: string) => void;
   onUpdateCourtTimer: (courtId: string, deltaMs: number) => void;
   onDeleteTeam: (teamId: string) => void;
-  onSwapPlayer: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
+  onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
   onSwapBetweenTeams: (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => void;
+  readOnly?: boolean;
 }
 
 export function MatchingArea({
@@ -24,6 +25,7 @@ export function MatchingArea({
   onDeleteTeam,
   onSwapPlayer,
   onSwapBetweenTeams,
+  readOnly,
 }: MatchingAreaProps) {
   const queuedTeams = teams.filter((t) => t.state === 'queued');
   const availableCourtCount = courts.filter((c) => c.status === 'available').length;
@@ -47,6 +49,7 @@ export function MatchingArea({
               onSwapPlayer={onSwapPlayer}
               onSwapBetweenTeams={onSwapBetweenTeams}
               availableCourtCount={availableCourtCount}
+              readOnly={readOnly}
             />
           ))}
         </div>

@@ -250,7 +250,13 @@ export function useGameState() {
                 };
               }
               
-              return court;
+              return {
+                ...court,
+                status: 'available' as const,
+                currentTeamId: null,
+                timerMs: 0,
+                isPaused: false,
+              };
             });
             
             // Update player states based on teams
@@ -1011,6 +1017,82 @@ export function useGameState() {
     }
   }, [addAuditLog, state.members, state.players]);
 
+  const syncFromSupabase = useCallback(async () => {
+    try {
+      console.log('🔄 Manual sync from Supabase...');
+      
+      // Load members
+      const membersFromDb = await membersApi.getAll();
+      
+      // Load players
+      const playersFromDb = await playersApi.getAll();
+      
+      // Load teams
+      const teamsFromDb = await teamsApi.getAll();
+      const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
+      
+      setState((prev) => {
+        // Restore courts based on playing teams
+        const restoredCourts = prev.courts.map(court => {
+          const playingTeam = activeTeams.find(
+            t => t.state === 'playing' && t.assignedCourtId === court.id
+          );
+          
+          if (playingTeam) {
+            return {
+              ...court,
+              status: 'occupied' as const,
+              currentTeamId: playingTeam.id,
+              timerMs: 0,
+              isPaused: false,
+            };
+          }
+          
+          return {
+            ...court,
+            status: 'available' as const,
+            currentTeamId: null,
+            timerMs: 0,
+            isPaused: false,
+          };
+        });
+        
+        // Update player states based on teams
+        const teamPlayerIds = new Set(activeTeams.flatMap(t => t.playerIds));
+        const restoredPlayers = playersFromDb.map(player => {
+          if (!teamPlayerIds.has(player.id)) return player;
+          
+          const playerTeam = activeTeams.find(t => t.playerIds.includes(player.id));
+          if (!playerTeam) return player;
+          
+          return {
+            ...player,
+            state: playerTeam.state === 'playing' ? 'playing' as const : 'queued' as const,
+          };
+        });
+        
+        return {
+          ...prev,
+          members: membersFromDb.length > 0 ? membersFromDb : prev.members,
+          players: restoredPlayers,
+          teams: activeTeams,
+          courts: restoredCourts,
+        };
+      });
+      
+      console.log('✅ Manual sync completed:', {
+        members: membersFromDb.length,
+        players: playersFromDb.length,
+        teams: activeTeams.length,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('⚠️ Failed to sync from Supabase:', error);
+      return false;
+    }
+  }, []);
+
   return {
     state,
     createSession,
@@ -1032,5 +1114,6 @@ export function useGameState() {
     updateMember,
     deleteMember,
     addMemberAsPlayer,
+    syncFromSupabase,
   };
 }

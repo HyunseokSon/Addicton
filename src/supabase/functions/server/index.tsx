@@ -307,4 +307,89 @@ app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
   }
 });
 
+// ============= ADMIN PASSWORD ENDPOINTS =============
+
+// Initialize admin password (only if not set)
+app.post("/make-server-41b22d2d/admin-password/init", async (c) => {
+  try {
+    const existingPassword = await kv.get("admin_password");
+    
+    if (existingPassword) {
+      return c.json({ message: "Password already initialized" });
+    }
+    
+    // Set default password to "1234"
+    await kv.set("admin_password", "1234");
+    
+    return c.json({ success: true, message: "Password initialized to 1234" });
+  } catch (error) {
+    console.error("Error initializing admin password:", error);
+    return c.json({ error: "Failed to initialize password", details: String(error) }, 500);
+  }
+});
+
+// Verify admin password
+app.post("/make-server-41b22d2d/admin-password/verify", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { password } = body;
+    
+    if (!password) {
+      return c.json({ error: "Password is required" }, 400);
+    }
+    
+    let storedPassword = await kv.get("admin_password");
+    
+    // If no password set, initialize with default "1234"
+    if (!storedPassword) {
+      await kv.set("admin_password", "1234");
+      storedPassword = "1234";
+    }
+    
+    const isValid = password === storedPassword;
+    
+    return c.json({ valid: isValid });
+  } catch (error) {
+    console.error("Error verifying admin password:", error);
+    return c.json({ error: "Failed to verify password", details: String(error) }, 500);
+  }
+});
+
+// Change admin password
+app.post("/make-server-41b22d2d/admin-password/change", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { currentPassword, newPassword } = body;
+    
+    if (!currentPassword || !newPassword) {
+      return c.json({ error: "Both current and new passwords are required" }, 400);
+    }
+    
+    if (newPassword.length < 4) {
+      return c.json({ error: "New password must be at least 4 characters" }, 400);
+    }
+    
+    let storedPassword = await kv.get("admin_password");
+    
+    // If no password set, initialize with default "1234"
+    if (!storedPassword) {
+      await kv.set("admin_password", "1234");
+      storedPassword = "1234";
+    }
+    
+    // Verify current password
+    if (currentPassword !== storedPassword) {
+      return c.json({ error: "Current password is incorrect" }, 401);
+    }
+    
+    // Update to new password
+    await kv.set("admin_password", newPassword);
+    
+    return c.json({ success: true, message: "Password changed successfully" });
+  } catch (error) {
+    console.error("Error changing admin password:", error);
+    return c.json({ error: "Failed to change password", details: String(error) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

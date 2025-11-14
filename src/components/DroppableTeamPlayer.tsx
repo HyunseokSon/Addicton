@@ -16,6 +16,7 @@ interface DroppableTeamPlayerProps {
   onSwap: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
   onSwapBetweenTeams?: (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => void;
   onReturnToWaiting?: (playerId: string, teamId: string) => void;
+  readOnly?: boolean;
 }
 
 export function DroppableTeamPlayer({
@@ -27,22 +28,25 @@ export function DroppableTeamPlayer({
   onSwap,
   onSwapBetweenTeams,
   onReturnToWaiting,
+  readOnly,
 }: DroppableTeamPlayerProps) {
   const [showSwapDialog, setShowSwapDialog] = useState(false);
 
-  // Make queued players draggable
+  // Make queued players draggable (only if not readOnly)
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.QUEUED_PLAYER,
     item: { playerId: player.id, teamId },
+    canDrag: !readOnly,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }), [player.id, teamId]);
+  }), [player.id, teamId, readOnly]);
 
-  // Accept both waiting and queued players for drop
+  // Accept both waiting and queued players for drop (only if not readOnly)
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: [ItemTypes.WAITING_PLAYER, ItemTypes.QUEUED_PLAYER],
     drop: (item: { playerId: string; teamId?: string }) => {
+      if (readOnly) return;
       if (item.teamId && item.teamId !== teamId) {
         // Swap between two different teams (queued <-> queued)
         if (onSwapBetweenTeams) {
@@ -54,14 +58,14 @@ export function DroppableTeamPlayer({
       }
     },
     canDrop: (item) => {
-      // Can't drop on self
-      return item.playerId !== player.id;
+      // Can't drop on self or if readOnly
+      return !readOnly && item.playerId !== player.id;
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
     }),
-  }), [player.id, teamId, onSwap, onSwapBetweenTeams]);
+  }), [player.id, teamId, onSwap, onSwapBetweenTeams, readOnly]);
 
   const showDropIndicator = isOver && canDrop;
 
@@ -83,8 +87,10 @@ export function DroppableTeamPlayer({
   return (
     <>
       <div
-        ref={attachRef}
-        className={`relative bg-white rounded-lg p-2.5 xl:p-4 border-2 transition-all cursor-grab active:cursor-grabbing shadow-sm min-w-0 ${
+        ref={readOnly ? null : attachRef}
+        className={`relative bg-white rounded-lg p-2.5 xl:p-4 border-2 transition-all shadow-sm min-w-0 ${
+          readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        } ${
           showDropIndicator
             ? 'bg-blue-50 border-blue-400 shadow-md'
             : isDragging
@@ -108,18 +114,20 @@ export function DroppableTeamPlayer({
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 px-2 py-0.5 text-xs whitespace-nowrap">
               {player.gameCount}회
             </Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="size-7 p-0 hover:bg-blue-50 shrink-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowSwapDialog(true);
-              }}
-              title="교체하기"
-            >
-              <ArrowLeftRight className="size-4 text-blue-600" />
-            </Button>
+            {!readOnly && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="size-7 p-0 hover:bg-blue-50 shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSwapDialog(true);
+                }}
+                title="교체하기"
+              >
+                <ArrowLeftRight className="size-4 text-blue-600" />
+              </Button>
+            )}
           </div>
         </div>
         {showDropIndicator && (

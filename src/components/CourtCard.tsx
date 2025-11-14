@@ -12,6 +12,7 @@ interface CourtCardProps {
   onTogglePause: () => void;
   onEndGame: () => void;
   onUpdateTimer: (deltaMs: number) => void;
+  readOnly?: boolean;
 }
 
 function formatTime(ms: number): string {
@@ -28,6 +29,7 @@ export function CourtCard({
   onTogglePause,
   onEndGame,
   onUpdateTimer,
+  readOnly,
 }: CourtCardProps) {
   const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -102,6 +104,7 @@ export function CourtCard({
           size="sm"
           className="w-full h-7 md:h-9 font-medium text-[10px] md:text-xs active:scale-95 transition-transform touch-manipulation shadow-sm hover:shadow-md"
           onClick={onEndGame}
+          disabled={readOnly}
         >
           <StopCircle className="size-3 md:size-3.5 mr-1 md:mr-1.5" />
           경기 종료
