@@ -232,10 +232,53 @@ export function useGameState() {
         
         if (activeTeams.length > 0) {
           console.log('✅ Loaded teams from Supabase:', activeTeams.length);
-          setState((prev) => ({
-            ...prev,
-            teams: activeTeams,
-          }));
+          setState((prev) => {
+            // Restore courts based on playing teams
+            const restoredCourts = prev.courts.map(court => {
+              // Find if any team is playing on this court
+              const playingTeam = activeTeams.find(
+                t => t.state === 'playing' && t.assignedCourtId === court.id
+              );
+              
+              if (playingTeam) {
+                // Calculate elapsed time if game has started
+                const elapsedMs = playingTeam.startedAt 
+                  ? Date.now() - new Date(playingTeam.startedAt).getTime()
+                  : 0;
+                
+                return {
+                  ...court,
+                  status: 'occupied' as const,
+                  currentTeamId: playingTeam.id,
+                  timerMs: elapsedMs,
+                  isPaused: false,
+                };
+              }
+              
+              return court;
+            });
+            
+            // Update player states based on teams
+            const teamPlayerIds = new Set(activeTeams.flatMap(t => t.playerIds));
+            const restoredPlayers = prev.players.map(player => {
+              if (!teamPlayerIds.has(player.id)) return player;
+              
+              const playerTeam = activeTeams.find(t => t.playerIds.includes(player.id));
+              if (!playerTeam) return player;
+              
+              return {
+                ...player,
+                state: playerTeam.state === 'playing' ? 'playing' as const : 'queued' as const,
+              };
+            });
+            
+            return {
+              ...prev,
+              teams: activeTeams,
+              courts: restoredCourts,
+              players: restoredPlayers,
+            };
+          });
         } else {
           console.log('ℹ️ No active teams found in Supabase');
         }
