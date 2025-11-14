@@ -487,6 +487,7 @@ export function useGameState() {
   const performAutoMatch = useCallback(async () => {
     try {
       const newTeamsToCreate: Team[] = [];
+      const playersToUpdate: string[] = [];
       
       setState((prev) => {
         if (!prev.session) return prev;
@@ -508,9 +509,13 @@ export function useGameState() {
         
         // Update player states to 'queued'
         const queuedPlayerIds = new Set(newTeams.flatMap((t) => t.playerIds));
-        const updatedPlayers = prev.players.map((p) =>
-          queuedPlayerIds.has(p.id) ? { ...p, state: 'queued' as const } : p
-        );
+        const updatedPlayers = prev.players.map((p) => {
+          if (queuedPlayerIds.has(p.id)) {
+            playersToUpdate.push(p.id);
+            return { ...p, state: 'queued' as const };
+          }
+          return p;
+        });
         
         return {
           ...prev,
@@ -525,6 +530,16 @@ export function useGameState() {
         console.log(`✅ Created ${newTeamsToCreate.length} teams in Supabase`);
       }
       
+      // Update player states in Supabase
+      if (playersToUpdate.length > 0) {
+        await Promise.all(
+          playersToUpdate.map((playerId) => 
+            playersApi.update(playerId, { state: 'queued' })
+          )
+        );
+        console.log(`✅ Updated ${playersToUpdate.length} players to queued state in Supabase`);
+      }
+      
       addAuditLog('auto_match_performed', {});
     } catch (error) {
       console.error('Failed to save teams to Supabase:', error);
@@ -534,6 +549,8 @@ export function useGameState() {
 
   const startGame = useCallback(async (teamId: string, courtId?: string) => {
     try {
+      let playersToUpdate: string[] = [];
+      
       setState((prev) => {
         const team = prev.teams.find((t) => t.id === teamId);
         if (!team) return prev;
@@ -544,6 +561,9 @@ export function useGameState() {
           : prev.courts.find((c) => c.status === 'available');
         
         if (!targetCourt || !prev.session) return prev;
+        
+        // Store player IDs to update in Supabase
+        playersToUpdate = team.playerIds;
         
         const updatedTeams = prev.teams.map((t) =>
           t.id === teamId
@@ -577,6 +597,16 @@ export function useGameState() {
         startedAt: new Date(),
       });
       console.log(`✅ Updated team ${teamId} to playing in Supabase`);
+      
+      // Update player states to 'playing' in Supabase
+      if (playersToUpdate.length > 0) {
+        await Promise.all(
+          playersToUpdate.map((playerId) => 
+            playersApi.update(playerId, { state: 'playing' })
+          )
+        );
+        console.log(`✅ Updated ${playersToUpdate.length} players to playing state in Supabase`);
+      }
       
       addAuditLog('game_started', { teamId, courtId });
     } catch (error) {
@@ -620,10 +650,11 @@ export function useGameState() {
             teammateHistory,
           };
           
-          // Store player updates to sync with Supabase
+          // Store player updates to sync with Supabase (including state change)
           playersToUpdate.push({
             id: p.id,
             updates: {
+              state: 'waiting',
               gameCount: p.gameCount + 1,
               lastGameEndAt: now,
               teammateHistory,
@@ -668,12 +699,12 @@ export function useGameState() {
       }
     }
     
-    // Update all players' game counts and teammate history in Supabase
+    // Update all players' game counts, state, and teammate history in Supabase
     try {
       for (const { id, updates } of playersToUpdate) {
         await playersApi.update(id, updates);
       }
-      console.log(`✅ Updated ${playersToUpdate.length} players' game data in Supabase`);
+      console.log(`✅ Updated ${playersToUpdate.length} players' game data and state in Supabase`);
     } catch (error) {
       console.error('Failed to update players in Supabase:', error);
     }
