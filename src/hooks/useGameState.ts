@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AppState, Player, Team, Court, Session, PlayerState, AuditLog, Member, Gender, Rank } from '../types';
 import { autoMatch, updatePriorityStatus } from '../utils/matching';
 import { createInitialMembers } from '../data/initialMembers';
+import { membersApi } from '../utils/api/membersApi';
 
 const STORAGE_KEY = 'addiction-game-matching-state';
 
@@ -170,6 +171,31 @@ export function useGameState() {
       teams: state.teams.length,
     });
   }, [state]);
+
+  // Load members from Supabase on initial mount
+  useEffect(() => {
+    const loadMembersFromSupabase = async () => {
+      try {
+        console.log('🔄 Loading members from Supabase...');
+        const membersFromDb = await membersApi.getAll();
+        
+        if (membersFromDb && membersFromDb.length > 0) {
+          console.log('✅ Loaded members from Supabase:', membersFromDb.length);
+          setState((prev) => ({
+            ...prev,
+            members: membersFromDb,
+          }));
+        } else {
+          console.log('ℹ️ No members found in Supabase, using local data');
+        }
+      } catch (error) {
+        console.error('⚠️ Failed to load members from Supabase:', error);
+        // Continue using local/initial members
+      }
+    };
+
+    loadMembersFromSupabase();
+  }, []); // Run only once on mount
 
   const addAuditLog = useCallback((type: string, payload: any) => {
     const log: AuditLog = {
@@ -518,41 +544,83 @@ export function useGameState() {
     addAuditLog('session_reset', {});
   }, [addAuditLog]);
 
-  // Member management functions
-  const addMember = useCallback((name: string, gender?: Gender, rank?: Rank) => {
-    setState((prev) => {
-      const member: Member = {
-        id: `member-${Date.now()}-${Math.random()}`,
-        name,
-        gender,
-        rank,
-        createdAt: new Date(),
-      };
+  // Member management functions with Supabase sync
+  const addMember = useCallback(async (name: string, gender?: Gender, rank?: Rank) => {
+    const member: Member = {
+      id: `member-${Date.now()}-${Math.random()}`,
+      name,
+      gender,
+      rank,
+      createdAt: new Date(),
+    };
+
+    try {
+      // Save to Supabase first
+      await membersApi.add(member);
       
-      return {
+      // Update local state
+      setState((prev) => ({
         ...prev,
         members: [...prev.members, member],
-      };
-    });
-    addAuditLog('member_added', { name, gender, rank });
+      }));
+      addAuditLog('member_added', { name, gender, rank });
+    } catch (error) {
+      console.error('Failed to add member to Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        members: [...prev.members, member],
+      }));
+      addAuditLog('member_added', { name, gender, rank });
+    }
   }, [addAuditLog]);
 
-  const updateMember = useCallback((memberId: string, updates: Partial<Member>) => {
-    setState((prev) => ({
-      ...prev,
-      members: prev.members.map((m) =>
-        m.id === memberId ? { ...m, ...updates } : m
-      ),
-    }));
-    addAuditLog('member_updated', { memberId, updates });
+  const updateMember = useCallback(async (memberId: string, updates: Partial<Member>) => {
+    try {
+      // Save to Supabase first
+      await membersApi.update(memberId, updates);
+      
+      // Update local state
+      setState((prev) => ({
+        ...prev,
+        members: prev.members.map((m) =>
+          m.id === memberId ? { ...m, ...updates } : m
+        ),
+      }));
+      addAuditLog('member_updated', { memberId, updates });
+    } catch (error) {
+      console.error('Failed to update member in Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        members: prev.members.map((m) =>
+          m.id === memberId ? { ...m, ...updates } : m
+        ),
+      }));
+      addAuditLog('member_updated', { memberId, updates });
+    }
   }, [addAuditLog]);
 
-  const deleteMember = useCallback((memberId: string) => {
-    setState((prev) => ({
-      ...prev,
-      members: prev.members.filter((m) => m.id !== memberId),
-    }));
-    addAuditLog('member_deleted', { memberId });
+  const deleteMember = useCallback(async (memberId: string) => {
+    try {
+      // Delete from Supabase first
+      await membersApi.delete(memberId);
+      
+      // Update local state
+      setState((prev) => ({
+        ...prev,
+        members: prev.members.filter((m) => m.id !== memberId),
+      }));
+      addAuditLog('member_deleted', { memberId });
+    } catch (error) {
+      console.error('Failed to delete member from Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        members: prev.members.filter((m) => m.id !== memberId),
+      }));
+      addAuditLog('member_deleted', { memberId });
+    }
   }, [addAuditLog]);
 
   const addMemberAsPlayer = useCallback((memberId: string) => {
