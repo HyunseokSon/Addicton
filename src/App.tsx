@@ -695,7 +695,7 @@ export default function App() {
                   <h2 className="font-semibold text-sm md:text-base">게임 대기중</h2>
                 </div>
                 <span className="text-[10px] md:text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
-                  {state.teams.filter(t => t.state === 'queued').length}팀
+                  {state.teams.filter(t => t.state === 'queued').length}/{state.session?.courtsCount || 4}팀
                 </span>
               </div>
               <div className="p-3 md:p-5">

@@ -388,15 +388,15 @@ export function useGameState() {
       console.log('  Queued teams:', currentQueuedTeams);
       console.log('  Playing teams:', playingTeams);
       
-      // Allow creating more teams than courts (for queue system)
-      // But limit to avoid creating too many teams at once
-      const maxNewTeams = Math.max(0, (totalCourts * 2) - currentQueuedTeams);
+      // 최대 대기 팀 수 = 총 코트 수
+      // 새로 생성 가능한 팀 수 = 총 코트 수 - 현재 대기 팀 수
+      const maxNewTeams = Math.max(0, totalCourts - currentQueuedTeams);
       
       console.log('  Max new teams to create:', maxNewTeams);
       
       // If no room for new teams, don't create any
       if (maxNewTeams === 0) {
-        console.log('  ⚠️ No room for new teams');
+        console.log('  ⚠️ No room for new teams - already have', currentQueuedTeams, 'queued teams (max:', totalCourts, ')');
         return;
       }
       
