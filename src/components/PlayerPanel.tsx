@@ -32,6 +32,7 @@ interface PlayerPanelProps {
   onAdjustGameCount: (id: string, delta: number) => void;
   onReturnToWaiting: (playerId: string, teamId: string) => void;
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
+  onDeleteAllWaitingPlayers?: () => void;
 }
 
 const STATE_LABELS: Record<PlayerState, string> = {
@@ -60,6 +61,7 @@ export function PlayerPanel({
   onAdjustGameCount,
   onReturnToWaiting,
   onSwapPlayer,
+  onDeleteAllWaitingPlayers,
 }: PlayerPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -106,10 +108,23 @@ export function PlayerPanel({
       {/* Waiting Players */}
       <div>
         <div className="flex items-center justify-between mb-2.5 md:mb-3">
-          <h3 className="font-semibold text-xs md:text-sm text-gray-700">대기 중</h3>
-          <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
-            {waitingPlayers.length}명
-          </Badge>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-xs md:text-sm text-gray-700">대기 중</h3>
+            <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
+              {waitingPlayers.length}명
+            </Badge>
+          </div>
+          {waitingPlayers.length > 0 && onDeleteAllWaitingPlayers && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDeleteAllWaitingPlayers}
+              className="h-6 px-2 hover:bg-red-50 text-[10px] md:text-xs text-red-600"
+            >
+              <Trash2 className="size-3 mr-1" />
+              전체 삭제
+            </Button>
+          )}
         </div>
         <div className="space-y-1.5 md:space-y-2 min-h-[100px] bg-gradient-to-br from-blue-50/30 to-blue-50/10 rounded-xl border-2 border-dashed border-blue-200 p-2.5 md:p-3">
           {waitingPlayers.length === 0 ? (
@@ -361,14 +376,6 @@ function WaitingPlayerCard({
                 disabled={player.gameCount === 0}
               >
                 <Info className="size-3 text-purple-600" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onStartEdit(player)}
-                className="size-7 p-0 hover:bg-blue-50"
-              >
-                <Edit2 className="size-3" />
               </Button>
               <Button
                 size="sm"

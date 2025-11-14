@@ -196,4 +196,115 @@ app.post("/make-server-41b22d2d/players/reset-game-counts", async (c) => {
   }
 });
 
+// ============= TEAMS ENDPOINTS =============
+
+// Get all teams
+app.get("/make-server-41b22d2d/teams", async (c) => {
+  try {
+    const teams = await kv.get("teams");
+    return c.json(teams || []);
+  } catch (error) {
+    console.error("Error getting teams:", error);
+    return c.json({ error: "Failed to get teams", details: String(error) }, 500);
+  }
+});
+
+// Add a new team
+app.post("/make-server-41b22d2d/teams", async (c) => {
+  try {
+    const team = await c.req.json();
+    
+    if (!team || !team.id || !team.playerIds) {
+      return c.json({ error: "Invalid team data" }, 400);
+    }
+
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = [...teams, team];
+    await kv.set("teams", updatedTeams);
+    
+    return c.json({ team, success: true });
+  } catch (error) {
+    console.error("Error adding team:", error);
+    return c.json({ error: "Failed to add team", details: String(error) }, 500);
+  }
+});
+
+// Add multiple teams (batch)
+app.post("/make-server-41b22d2d/teams/batch", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { teams: newTeams } = body;
+    
+    if (!newTeams || !Array.isArray(newTeams)) {
+      return c.json({ error: "Invalid teams data" }, 400);
+    }
+
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = [...teams, ...newTeams];
+    await kv.set("teams", updatedTeams);
+    
+    return c.json({ success: true, count: newTeams.length });
+  } catch (error) {
+    console.error("Error adding teams:", error);
+    return c.json({ error: "Failed to add teams", details: String(error) }, 500);
+  }
+});
+
+// Update a team
+app.put("/make-server-41b22d2d/teams/:id", async (c) => {
+  try {
+    const teamId = c.req.param("id");
+    const updates = await c.req.json();
+    
+    if (!teamId || !updates) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = teams.map((t: any) =>
+      t.id === teamId ? { ...t, ...updates } : t
+    );
+    await kv.set("teams", updatedTeams);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error updating team:", error);
+    return c.json({ error: "Failed to update team", details: String(error) }, 500);
+  }
+});
+
+// Delete a team
+app.delete("/make-server-41b22d2d/teams/:id", async (c) => {
+  try {
+    const teamId = c.req.param("id");
+    
+    if (!teamId) {
+      return c.json({ error: "Invalid team ID" }, 400);
+    }
+
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = teams.filter((t: any) => t.id !== teamId);
+    await kv.set("teams", updatedTeams);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting team:", error);
+    return c.json({ error: "Failed to delete team", details: String(error) }, 500);
+  }
+});
+
+// Delete all finished teams
+app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
+  try {
+    const teams = (await kv.get("teams")) || [];
+    const updatedTeams = teams.filter((t: any) => t.state !== 'finished');
+    await kv.set("teams", updatedTeams);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting finished teams:", error);
+    return c.json({ error: "Failed to delete finished teams", details: String(error) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

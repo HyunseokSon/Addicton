@@ -157,6 +157,28 @@ export default function App() {
     });
   };
 
+  const handleDeleteAllWaitingPlayers = () => {
+    const waitingPlayers = state.players.filter(
+      (p) => p.state === 'waiting' || p.state === 'priority'
+    );
+
+    if (waitingPlayers.length === 0) {
+      toast.error('삭제 실패', {
+        description: '대기중인 참가자가 없습니다.',
+      });
+      return;
+    }
+
+    // Delete all waiting players
+    waitingPlayers.forEach((player) => {
+      deletePlayer(player.id);
+    });
+
+    toast.success('전체 삭제 완료', {
+      description: `${waitingPlayers.length}명의 참가자가 삭제되었습니다.`,
+    });
+  };
+
   if (!state.session) {
     return null;
   }
@@ -286,6 +308,7 @@ export default function App() {
                       onAdjustGameCount={adjustGameCount}
                       onReturnToWaiting={handleReturnToWaiting}
                       onSwapPlayer={handleSwapPlayer}
+                      onDeleteAllWaitingPlayers={handleDeleteAllWaitingPlayers}
                     />
                   </TabsContent>
                   <TabsContent value="members" className="mt-0">
