@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import React from 'react';
 import { toast } from 'sonner';
 import { membersApi } from '../utils/api/membersApi';
+import { AddMemberDialog } from './AddMemberDialog';
 
 interface MemberManagementProps {
   members: Member[];
@@ -61,6 +62,7 @@ export function MemberManagement({
   const [filterStatus, setFilterStatus] = useState<'all' | 'registered' | 'notRegistered'>('all');
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
   const [isBatchAdding, setIsBatchAdding] = useState(false);
+  const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
 
   // Check if a member is already registered as a player
   const isMemberRegistered = (memberName: string) => {
@@ -155,51 +157,23 @@ export function MemberManagement({
   const handleBatchAdd = async () => {
     if (selectedMemberIds.size === 0) return;
     
-    // Show loading modal
-    setLoadingModal({
-      open: true,
-      title: '일괄 참가 등록 중',
-      description: `${selectedMemberIds.size}명의 모임원을 참가 등록하고 있습니다...`,
-      status: 'loading',
-    });
-
     try {
+      toast.loading(`${selectedMemberIds.size}명의 모임원을 참가 등록하고 있습니다...`, { id: 'batch-add' });
+      
       const count = await addMembersAsPlayers(Array.from(selectedMemberIds));
       
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '일괄 참가 등록 중',
-        description: `${count}명이 등록되었습니다. 데이터를 새로고침합니다...`,
-        status: 'loading',
-      });
+      toast.loading(`${count}명이 등록되었습니다. 데이터를 새로고침합니다...`, { id: 'batch-add' });
 
       // Auto sync to reflect changes
       await syncFromSupabase();
 
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '일괄 참가 완료',
-        description: `${count}명이 참가 등록되었습니다.`,
-        status: 'success',
-      });
+      toast.success(`${count}명이 참가 등록되었습니다.`, { id: 'batch-add' });
 
       setSelectedMemberIds(new Set());
 
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
-
     } catch (error) {
       console.error('Batch add failed:', error);
-      setLoadingModal({
-        open: true,
-        title: '일괄 참가 실패',
-        status: 'error',
-        errorMessage: '등록 중 오류가 발생했습니다. 다시 시도해주세요.',
-      });
+      toast.error('등록 중 오류가 발생했습니다. 다시 시도해주세요.', { id: 'batch-add' });
     }
   };
 
@@ -307,79 +281,24 @@ export function MemberManagement({
 
   return (
     <div className="space-y-4 md:space-y-5">
-      {/* Add Member Form */}
-      {!readOnly && (
-        <div className="bg-gradient-to-br from-blue-50/50 to-blue-50/30 border border-blue-200 rounded-xl p-3 md:p-4 shadow-sm">
-          <h3 className="font-semibold text-xs md:text-sm text-gray-700 mb-2.5 md:mb-3">모임원 추가</h3>
-          <div className="space-y-2">
-            <Input
-              type="text"
-              placeholder="이름 입력 (필수)"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && newName.trim() && newGender && newRank && handleAdd()}
-              className="w-full h-9 md:h-10 text-xs md:text-sm"
-            />
-            <div className="flex gap-2">
-              <Select
-                value={newGender}
-                onValueChange={(value) => setNewGender(value as Gender)}
-              >
-                <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                  <SelectValue placeholder="성별 선택 (필수)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="남">남</SelectItem>
-                  <SelectItem value="녀">녀</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={newRank}
-                onValueChange={(value) => setNewRank(value as Rank)}
-              >
-                <SelectTrigger className="flex-1 h-9 md:h-10 text-xs md:text-sm">
-                  <SelectValue placeholder="급수 선택 (필수)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="S">S</SelectItem>
-                  <SelectItem value="A">A</SelectItem>
-                  <SelectItem value="B">B</SelectItem>
-                  <SelectItem value="C">C</SelectItem>
-                  <SelectItem value="D">D</SelectItem>
-                  <SelectItem value="E">E</SelectItem>
-                  <SelectItem value="F">F</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button 
-              onClick={handleAdd} 
-              disabled={!newName.trim() || !newGender || !newRank}
-              className="w-full h-9 md:h-10 bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <UserPlus className="size-3.5 md:size-4 mr-2" />
-              모임원 추가
-            </Button>
-            <div className="pt-2 border-t">
-              <Button 
-                onClick={handleResetMembers} 
-                variant="outline"
-                className="w-full h-9 md:h-10 border-2 border-red-300 hover:bg-red-50 hover:border-red-400 active:scale-95 shadow-sm text-xs md:text-sm touch-manipulation text-red-700"
-              >
-                <Database className="size-3.5 md:size-4 mr-2" />
-                모임원 DB 초기화 (70명)
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Members List */}
       <div>
         <div className="flex items-center justify-between mb-2.5 md:mb-3">
           <h3 className="font-semibold text-xs md:text-sm text-gray-700">등록된 모임원</h3>
-          <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
-            {filteredMembers.length}/{members.length}명
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
+              {filteredMembers.length}/{members.length}명
+            </Badge>
+            {!readOnly && (
+              <Button
+                onClick={() => setShowAddMemberDialog(true)}
+                className="h-7 md:h-8 px-2.5 md:px-3 bg-blue-600 hover:bg-blue-700 text-[10px] md:text-xs shadow-sm"
+              >
+                <UserPlus className="size-3 md:size-3.5 mr-1 md:mr-1.5" />
+                모임원 추가
+              </Button>
+            )}
+          </div>
         </div>
         
         {/* Batch Add Button */}
@@ -477,6 +396,13 @@ export function MemberManagement({
           )}
         </div>
       </div>
+
+      {/* Add Member Dialog */}
+      <AddMemberDialog
+        open={showAddMemberDialog}
+        onOpenChange={setShowAddMemberDialog}
+        onAddMember={onAddMember}
+      />
     </div>
   );
 }
@@ -653,37 +579,15 @@ const MemberCard = React.memo(function MemberCard({
               <Button
                 size="sm"
                 onClick={async () => {
-                  // Show loading modal
-                  setLoadingModal({
-                    open: true,
-                    title: '참가 등록 중',
-                    description: `${member.name}님을 참가자로 등록하고 있습니다...`,
-                    status: 'loading',
-                  });
-
                   try {
+                    toast.loading(`${member.name}님을 참가자로 등록하고 있습니다...`, { id: `add-${member.id}` });
+                    
                     await onAddMemberAsPlayer(member.id);
                     
-                    // Show success
-                    setLoadingModal({
-                      open: true,
-                      title: '참가 등록 완료',
-                      description: `${member.name}님이 참가자로 등록되었습니다.`,
-                      status: 'success',
-                    });
-
-                    // Auto close after 1.5 seconds
-                    setTimeout(() => {
-                      setLoadingModal(prev => ({ ...prev, open: false }));
-                    }, 1500);
+                    toast.success(`${member.name}님이 참가자로 등록되었습니다.`, { id: `add-${member.id}` });
                   } catch (error) {
                     console.error('Failed to add member as player:', error);
-                    setLoadingModal({
-                      open: true,
-                      title: '참가 등록 실패',
-                      status: 'error',
-                      errorMessage: '등록 중 오류가 발생했습니다. 다시 시도해주세요.',
-                    });
+                    toast.error('등록 중 오류가 발생했습니다. 다시 시도해주세요.', { id: `add-${member.id}` });
                   }
                 }}
                 className="w-full h-8 md:h-9 bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-sm text-[10px] md:text-xs touch-manipulation"

@@ -809,13 +809,17 @@ export default function App() {
                 disabled={state.teams.filter((t) => t.state === 'queued').length === 0}
                 className="flex-1 bg-emerald-600 text-white rounded-xl px-4 py-4 shadow-2xl hover:bg-emerald-700 active:scale-95 font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ 일괄 시작
+                ⚡일괄 시작
               </button>
             </div>
           </div>
         )}
 
-        <Toaster />
+        <Toaster 
+          position="bottom-right"
+          offset="120px"
+          className="md:!bottom-4"
+        />
       </div>
     </DndProvider>
   );
