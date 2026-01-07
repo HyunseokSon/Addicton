@@ -688,7 +688,7 @@ export default function App() {
                   <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} mb-3`}>
                     <TabsTrigger value="waiting" className="text-xs">대기 중</TabsTrigger>
                     <TabsTrigger value="queued" className="text-xs">대기 팀</TabsTrigger>
-                    {isAdmin && <TabsTrigger value="management" className="text-xs">모임원 관리</TabsTrigger>}
+                    {isAdmin && <TabsTrigger value="management" className="text-xs">참가자 등록</TabsTrigger>}
                   </TabsList>
 
                   <TabsContent value="waiting">
