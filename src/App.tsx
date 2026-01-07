@@ -685,10 +685,10 @@ export default function App() {
               {/* Player Panel */}
               <div>
                 <Tabs defaultValue="waiting" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-3">
+                  <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} mb-3`}>
                     <TabsTrigger value="waiting" className="text-xs">대기 중</TabsTrigger>
                     <TabsTrigger value="queued" className="text-xs">대기 팀</TabsTrigger>
-                    <TabsTrigger value="management" className="text-xs">모임원 관리</TabsTrigger>
+                    {isAdmin && <TabsTrigger value="management" className="text-xs">모임원 관리</TabsTrigger>}
                   </TabsList>
 
                   <TabsContent value="waiting">
@@ -715,8 +715,8 @@ export default function App() {
                     />
                   </TabsContent>
 
-                  <TabsContent value="management">
-                    {isAdmin ? (
+                  {isAdmin && (
+                    <TabsContent value="management">
                       <MemberManagement
                         members={state.members}
                         players={state.players}
@@ -729,12 +729,8 @@ export default function App() {
                         resetMembers={resetMembers}
                         setLoadingModal={setLoadingModal}
                       />
-                    ) : (
-                      <div className="text-center py-8 text-sm text-muted-foreground">
-                        관리자 권한이 필요합니다
-                      </div>
-                    )}
-                  </TabsContent>
+                    </TabsContent>
+                  )}
                 </Tabs>
               </div>
             </div>
