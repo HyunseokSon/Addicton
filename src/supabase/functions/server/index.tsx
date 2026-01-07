@@ -554,6 +554,46 @@ app.post("/make-server-41b22d2d/admin-password/change", async (c) => {
 
 // ============= DATA MIGRATION ENDPOINT =============
 
+// Get setting
+app.get("/make-server-41b22d2d/settings/:key", async (c) => {
+  try {
+    const key = c.req.param("key");
+    
+    if (!key) {
+      return c.json({ error: "Invalid setting key" }, 400);
+    }
+
+    const value = await db.getSetting(key);
+    
+    return c.json({ key, value });
+  } catch (error) {
+    console.error("Error getting setting:", error);
+    return c.json({ error: "Failed to get setting", details: String(error) }, 500);
+  }
+});
+
+// Set setting
+app.put("/make-server-41b22d2d/settings/:key", async (c) => {
+  try {
+    const key = c.req.param("key");
+    const body = await c.req.json();
+    const { value } = body;
+    
+    if (!key || value === undefined) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    await db.setSetting(key, String(value));
+    
+    return c.json({ success: true, key, value });
+  } catch (error) {
+    console.error("Error setting value:", error);
+    return c.json({ error: "Failed to set setting", details: String(error) }, 500);
+  }
+});
+
+// ============= DATA MIGRATION ENDPOINT =============
+
 // Check what's in KV store
 app.get("/make-server-41b22d2d/check-kv", async (c) => {
   try {

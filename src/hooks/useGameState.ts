@@ -5,6 +5,7 @@ import { createInitialMembers } from '../data/initialMembers';
 import { membersApi } from '../utils/api/membersApi';
 import { playersApi } from '../utils/api/playersApi';
 import { teamsApi } from '../utils/api/teamsApi';
+import { settingsApi } from '../utils/api/settingsApi';
 
 // Convert index to letter (0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, etc.)
 function indexToLetter(index: number): string {
@@ -62,6 +63,11 @@ export function useGameState() {
       try {
         console.log('🔄 Loading all data from Supabase...');
         
+        // Load courtsCount from settings
+        const courtsCountStr = await settingsApi.get('courts_count');
+        const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
+        console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
+        
         // Load members
         const membersFromDb = await membersApi.getAll();
         
@@ -73,8 +79,25 @@ export function useGameState() {
         const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
         
         setState((prev) => {
+          // Create courts array based on loaded courtsCount
+          const courtsToCreate = Math.max(courtsCount, prev.courts.length);
+          let updatedCourts = prev.courts;
+          
+          if (courtsToCreate > prev.courts.length) {
+            const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => ({
+              id: `court-${prev.courts.length + i}`,
+              index: prev.courts.length + i + 1,
+              name: indexToLetter(prev.courts.length + i),
+              status: 'available' as const,
+              timerMs: 0,
+              currentTeamId: null,
+              isPaused: false,
+            }));
+            updatedCourts = [...prev.courts, ...additionalCourts];
+          }
+          
           // Restore courts based on playing teams
-          const restoredCourts = prev.courts.map(court => {
+          const restoredCourts = updatedCourts.map(court => {
             const playingTeam = activeTeams.find(
               t => t.state === 'playing' && t.assignedCourtId === court.id
             );
@@ -113,6 +136,7 @@ export function useGameState() {
           });
           
           console.log('✅ Data loaded from Supabase:', {
+            courtsCount,
             members: membersFromDb.length,
             players: playersFromDb.length,
             teams: activeTeams.length,
@@ -120,6 +144,7 @@ export function useGameState() {
           
           return {
             ...prev,
+            session: prev.session ? { ...prev.session, courtsCount } : prev.session,
             members: membersFromDb,
             players: restoredPlayers,
             teams: activeTeams,
@@ -196,6 +221,13 @@ export function useGameState() {
         }
         // When reducing count, keep all courts in memory (don't remove them)
         // They will be filtered out when displaying based on courtsCount
+        
+        // Save courtsCount to Supabase settings
+        settingsApi.set('courts_count', updates.courtsCount).then(() => {
+          console.log(`✅ Saved courtsCount ${updates.courtsCount} to Supabase settings`);
+        }).catch((error) => {
+          console.error('Failed to save courtsCount to Supabase:', error);
+        });
       }
       
       return {
@@ -1146,6 +1178,11 @@ export function useGameState() {
     try {
       console.log('🔄 Manual sync from Supabase...');
       
+      // Load courtsCount from settings
+      const courtsCountStr = await settingsApi.get('courts_count');
+      const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
+      console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
+      
       // Load members
       const membersFromDb = await membersApi.getAll();
       console.log(`📦 Loaded ${membersFromDb.length} members from Supabase:`, membersFromDb.map(m => ({ id: m.id, name: m.name, gender: m.gender, rank: m.rank })));
@@ -1173,8 +1210,22 @@ export function useGameState() {
       
       // Update local state with all data from Supabase
       setState((prev) => {
-        // Rebuild courts based on teams data
-        let updatedCourts = [...prev.courts];
+        // Create courts array based on loaded courtsCount
+        const courtsToCreate = Math.max(courtsCount, prev.courts.length);
+        let updatedCourts = prev.courts;
+        
+        if (courtsToCreate > prev.courts.length) {
+          const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => ({
+            id: `court-${prev.courts.length + i}`,
+            index: prev.courts.length + i + 1,
+            name: indexToLetter(prev.courts.length + i),
+            status: 'available' as const,
+            timerMs: 0,
+            currentTeamId: null,
+            isPaused: false,
+          }));
+          updatedCourts = [...prev.courts, ...additionalCourts];
+        }
         
         // First, reset all courts to available
         updatedCourts = updatedCourts.map(court => ({
@@ -1224,6 +1275,7 @@ export function useGameState() {
         
         return {
           ...prev,
+          session: prev.session ? { ...prev.session, courtsCount } : prev.session,
           members: membersFromDb,
           players: syncedPlayers,
           teams: activeTeams,
