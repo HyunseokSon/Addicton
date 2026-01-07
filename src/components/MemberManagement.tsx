@@ -83,7 +83,7 @@ export function MemberManagement({
         (filterStatus === 'notRegistered' && !isRegistered);
       
       return matchesSearch && matchesStatus;
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [members, searchQuery, filterStatus, players]);
 
   // Get unregistered members from filtered list

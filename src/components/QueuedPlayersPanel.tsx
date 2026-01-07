@@ -32,7 +32,7 @@ export function QueuedPlayersPanel({
   onReturnToWaiting,
   readOnly = false,
 }: QueuedPlayersPanelProps) {
-  const queuedPlayers = players.filter((p) => p.state === 'queued');
+  const queuedPlayers = players.filter((p) => p.state === 'queued').sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-4 md:space-y-5">

@@ -100,10 +100,10 @@ export function PlayerPanel({
   };
 
   // Filter players by state
-  const waitingPlayers = players.filter((p) => p.state === 'waiting' || p.state === 'priority');
-  const restingPlayers = players.filter((p) => p.state === 'resting');
-  const playingPlayers = players.filter((p) => p.state === 'playing');
-  const queuedPlayers = players.filter((p) => p.state === 'queued');
+  const waitingPlayers = players.filter((p) => p.state === 'waiting' || p.state === 'priority').sort((a, b) => a.name.localeCompare(b.name));
+  const restingPlayers = players.filter((p) => p.state === 'resting').sort((a, b) => a.name.localeCompare(b.name));
+  const playingPlayers = players.filter((p) => p.state === 'playing').sort((a, b) => a.name.localeCompare(b.name));
+  const queuedPlayers = players.filter((p) => p.state === 'queued').sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-4 md:space-y-5">
