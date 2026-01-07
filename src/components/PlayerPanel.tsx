@@ -160,64 +160,6 @@ export function PlayerPanel({
         </div>
       </div>
 
-      {/* Queued Players - 게임 대기중 */}
-      {queuedPlayers.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-2.5 md:mb-3">
-            <h3 className="font-semibold text-xs md:text-sm text-gray-700">게임 대기중</h3>
-            <Badge variant="secondary" className="text-[10px] md:text-xs px-2 py-0.5 shadow-sm">
-              {queuedPlayers.length}명
-            </Badge>
-          </div>
-          <div className="space-y-1.5 md:space-y-2 bg-orange-50/50 rounded-xl border border-orange-200 p-2.5 md:p-3 max-h-[300px] md:max-h-[400px] overflow-y-auto">
-            {queuedPlayers.map((player) => {
-              const team = teams?.find(t => t.playerIds.includes(player.id));
-              return (
-                <div
-                  key={player.id}
-                  className="bg-white border border-orange-200 rounded-lg p-2 md:p-2.5 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-0">
-                      <span className="text-xs md:text-sm truncate">{player.name}</span>
-                      {player.gender && (
-                        <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0.5">
-                          {player.gender}
-                        </Badge>
-                      )}
-                      {player.rank && (
-                        <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0.5 bg-amber-50 border-amber-300 text-amber-700">
-                          {player.rank}
-                        </Badge>
-                      )}
-                      <Badge className={`text-[9px] md:text-xs px-1.5 py-0.5 ${STATE_COLORS[player.state]}`}>
-                        {STATE_LABELS[player.state]}
-                      </Badge>
-                      {team && (
-                        <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0.5 bg-blue-50 border-blue-300 text-blue-700">
-                          팀 {teams?.filter(t => t.state === 'queued').indexOf(team) + 1}
-                        </Badge>
-                      )}
-                    </div>
-                    {!readOnly && team && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onReturnToWaiting(player.id, team.id)}
-                        className="size-6 md:size-7 p-0 hover:bg-red-50 touch-manipulation"
-                        title="대기로 복귀"
-                      >
-                        <Trash2 className="size-3 md:size-3.5 text-red-600" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Resting Players */}
       {restingPlayers.length > 0 && (
         <div>

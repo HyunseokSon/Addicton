@@ -773,6 +773,124 @@ export function useGameState() {
     }
   }, [addAuditLog, state.courts, state.teams, state.players]);
 
+  const endAllGames = useCallback(async () => {
+    console.log('🎮 endAllGames called - ending all playing games');
+    
+    // Find all courts with active games
+    const activeCourts = state.courts.filter(c => c.status === 'occupied' && c.currentTeamId);
+    
+    if (activeCourts.length === 0) {
+      console.log('❌ No active games to end');
+      return 0;
+    }
+    
+    console.log(`✅ Found ${activeCourts.length} active games to end`);
+    
+    const allPlayersToUpdate: { id: string, updates: Partial<Player> }[] = [];
+    const allTeamsToDelete: string[] = [];
+    const now = new Date();
+    
+    // Prepare updates for all active games
+    for (const court of activeCourts) {
+      const team = state.teams.find((t) => t.id === court.currentTeamId);
+      if (!team) continue;
+      
+      allTeamsToDelete.push(team.id);
+      
+      // Prepare player updates for this team
+      team.playerIds.forEach(playerId => {
+        const player = state.players.find(p => p.id === playerId);
+        if (player) {
+          const teammates = team.playerIds.filter(id => id !== playerId);
+          const teammateHistory = { ...(player.teammateHistory || {}) };
+          
+          for (const teammateId of teammates) {
+            teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
+          }
+          
+          allPlayersToUpdate.push({
+            id: playerId,
+            updates: {
+              state: 'waiting',
+              gameCount: player.gameCount + 1,
+              lastGameEndAt: now,
+              teammateHistory,
+            },
+          });
+        }
+      });
+    }
+    
+    console.log(`🔄 Prepared to update ${allPlayersToUpdate.length} players, delete ${allTeamsToDelete.length} teams`);
+    
+    try {
+      // Update local state first
+      setState((prev) => {
+        const updatedPlayers = prev.players.map((p) => {
+          const update = allPlayersToUpdate.find(u => u.id === p.id);
+          if (update) {
+            return {
+              ...p,
+              state: 'waiting' as const,
+              gameCount: p.gameCount + 1,
+              lastGameEndAt: now,
+              teammateHistory: update.updates.teammateHistory,
+            };
+          }
+          return p;
+        });
+        
+        // Auto-update priority status
+        const priorityUpdatedPlayers = updatePriorityStatus(updatedPlayers);
+        
+        // Remove all finished teams
+        const updatedTeams = prev.teams.filter((t) => !allTeamsToDelete.includes(t.id));
+        
+        // Reset all courts
+        const updatedCourts = prev.courts.map((c) => {
+          if (activeCourts.some(ac => ac.id === c.id)) {
+            return { ...c, status: 'available' as const, currentTeamId: null, timerMs: 0, isPaused: false };
+          }
+          return c;
+        });
+        
+        return {
+          ...prev,
+          players: priorityUpdatedPlayers,
+          teams: updatedTeams,
+          courts: updatedCourts,
+        };
+      });
+      
+      // Update Supabase - batch all updates
+      console.log('📤 Updating Supabase with batch changes...');
+      
+      // Update players in parallel
+      await Promise.all(
+        allPlayersToUpdate.map(({ id, updates }) =>
+          playersApi.update(id, updates)
+        )
+      );
+      
+      // Delete teams in parallel
+      await Promise.all(
+        allTeamsToDelete.map(teamId => teamsApi.delete(teamId))
+      );
+      
+      console.log('✅ All games ended successfully in Supabase');
+      addAuditLog('batch_games_ended', { 
+        gamesEnded: activeCourts.length,
+        playersUpdated: allPlayersToUpdate.length,
+        teamsDeleted: allTeamsToDelete.length 
+      });
+      
+      return activeCourts.length;
+    } catch (error) {
+      console.error('❌ Failed to end all games:', error);
+      throw error;
+    }
+  }, [addAuditLog, state.courts, state.teams, state.players]);
+
   const toggleCourtPause = useCallback((courtId: string) => {
     setState((prev) => ({
       ...prev,
@@ -1344,6 +1462,7 @@ export function useGameState() {
     startGame,
     startAllQueuedGames,
     endGame,
+    endAllGames,
     toggleCourtPause,
     updateCourtTimer,
     updateCourtNames,

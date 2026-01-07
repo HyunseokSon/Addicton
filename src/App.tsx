@@ -9,6 +9,8 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import { CourtCard } from './components/CourtCard';
 import { CourtSettingsDialog } from './components/CourtSettingsDialog';
+import { EndAllGamesConfirmDialog } from './components/EndAllGamesConfirmDialog';
+import { QueuedPlayersPanel } from './components/QueuedPlayersPanel';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -41,6 +43,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showCourtSettings, setShowCourtSettings] = useState(false);
+  const [showEndAllGamesDialog, setShowEndAllGamesDialog] = useState(false);
   const [loadingModal, setLoadingModal] = useState<{
     open: boolean;
     title: string;
@@ -65,6 +68,7 @@ export default function App() {
     startGame,
     startAllQueuedGames,
     endGame,
+    endAllGames,
     toggleCourtPause,
     updateCourtTimer,
     updateCourtNames,
@@ -233,6 +237,47 @@ export default function App() {
         title: '게임 종료 실패',
         status: 'error',
         errorMessage: '게임 종료 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
+  };
+
+  const handleEndAllGames = async () => {
+    const activeCourts = state.courts.filter((c) => c.status === 'occupied');
+    
+    if (activeCourts.length === 0) {
+      toast.error('종료 실패', {
+        description: '진행중인 게임이 없습니다.',
+      });
+      return;
+    }
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '모든 게임 종료 중',
+      description: `${activeCourts.length}개의 게임을 종료하고 있습니다...`,
+      status: 'loading',
+    });
+
+    try {
+      const endedCount = await endAllGames();
+      
+      // Close modal and show success toast immediately
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('모든 게임 종료 완료', {
+        description: `${endedCount}개의 게임이 종료되었습니다.`,
+      });
+
+      // Background sync without waiting
+      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
+
+    } catch (error) {
+      console.error('End all games failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '모든 게임 종료 실패',
+        status: 'error',
+        errorMessage: '모든 게임 종료 중 오류가 발생했습니다. 다시 시도해주세요.',
       });
     }
   };
@@ -599,12 +644,21 @@ export default function App() {
                 코트 현황
               </h2>
               {isAdmin && (
-                <button
-                  onClick={() => setShowCourtSettings(true)}
-                  className="px-2 md:px-3 py-1 md:py-1.5 text-xs border rounded-lg hover:bg-gray-50 active:scale-95 transition-all"
-                >
-                  코트 설정
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCourtSettings(true)}
+                    className="px-2 md:px-3 py-1 md:py-1.5 text-xs border rounded-lg hover:bg-gray-50 active:scale-95 transition-all"
+                  >
+                    코트 설정
+                  </button>
+                  <button
+                    onClick={() => setShowEndAllGamesDialog(true)}
+                    disabled={state.courts.filter(c => c.status === 'occupied').length === 0}
+                    className="px-2 md:px-3 py-1 md:py-1.5 text-xs border border-red-300 text-red-600 rounded-lg hover:bg-red-50 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    일괄 종료
+                  </button>
+                </div>
               )}
             </div>
             <div className={`grid ${getCourtGridCols(state.session?.courtsCount || 4)} gap-3`}>
@@ -631,20 +685,32 @@ export default function App() {
               {/* Player Panel */}
               <div>
                 <Tabs defaultValue="waiting" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 mb-3">
+                  <TabsList className="grid w-full grid-cols-3 mb-3">
                     <TabsTrigger value="waiting" className="text-xs">대기 중</TabsTrigger>
+                    <TabsTrigger value="queued" className="text-xs">대기 팀</TabsTrigger>
                     <TabsTrigger value="management" className="text-xs">모임원 관리</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="waiting">
                     <PlayerPanel
                       players={state.players}
+                      teams={state.teams}
                       onAddPlayer={addPlayer}
                       onUpdatePlayer={updatePlayer}
                       onDeletePlayer={deletePlayer}
                       onUpdatePlayerState={updatePlayerState}
                       onAdjustGameCount={adjustGameCount}
+                      onReturnToWaiting={handleReturnToWaiting}
                       onRemoveAllWaiting={handleRemoveAllWaiting}
+                      readOnly={!isAdmin}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="queued">
+                    <QueuedPlayersPanel
+                      players={state.players}
+                      teams={state.teams}
+                      onReturnToWaiting={handleReturnToWaiting}
                       readOnly={!isAdmin}
                     />
                   </TabsContent>
@@ -680,7 +746,7 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                     <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-                    게임 대기중
+                    대기 팀
                   </h2>
                   <button className="text-xs text-gray-500">이력 사용중</button>
                 </div>
@@ -712,6 +778,14 @@ export default function App() {
           onOpenChange={setShowCourtSettings}
           courts={state.courts}
           onUpdateCourtNames={updateCourtNames}
+        />
+
+        {/* End All Games Confirm Dialog */}
+        <EndAllGamesConfirmDialog
+          open={showEndAllGamesDialog}
+          onOpenChange={setShowEndAllGamesDialog}
+          activeGamesCount={state.courts.filter(c => c.status === 'occupied').length}
+          onConfirm={handleEndAllGames}
         />
 
         {/* Loading Modal */}
