@@ -815,11 +815,7 @@ export default function App() {
           </div>
         )}
 
-        <Toaster 
-          position="bottom-right"
-          offset="120px"
-          className="md:!bottom-4"
-        />
+        <Toaster />
       </div>
     </DndProvider>
   );
