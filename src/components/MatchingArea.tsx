@@ -31,9 +31,9 @@ export function MatchingArea({
 
   return (
     <div className="space-y-4">
-      {/* Batch Start Button */}
+      {/* Batch Start Button - Desktop Only */}
       {queuedTeams.length > 0 && isAdmin && (
-        <div className="relative">
+        <div className="relative hidden md:block">
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-xl blur opacity-20 animate-pulse"></div>
           <Button
             onClick={onStartAllGames}

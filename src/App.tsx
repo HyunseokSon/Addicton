@@ -724,14 +724,25 @@ export default function App() {
           errorMessage={loadingModal.errorMessage}
         />
 
-        {/* Mobile Floating Match Button */}
+        {/* Mobile Floating Action Buttons */}
         {isAdmin && (
-          <button
-            onClick={handleAutoMatch}
-            className="md:hidden fixed bottom-6 right-6 z-50 bg-blue-600 text-white rounded-full px-6 py-4 shadow-2xl hover:bg-blue-700 active:scale-95 font-bold text-sm transition-all flex items-center gap-2"
-          >
-            🔵 팀 매칭
-          </button>
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 p-4 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
+            <div className="flex gap-3 pointer-events-auto">
+              <button
+                onClick={handleAutoMatch}
+                className="flex-1 bg-blue-600 text-white rounded-xl px-4 py-4 shadow-2xl hover:bg-blue-700 active:scale-95 font-bold text-sm transition-all flex items-center justify-center gap-2"
+              >
+                🔵 팀 매칭
+              </button>
+              <button
+                onClick={handleStartAllQueuedGames}
+                disabled={state.teams.filter((t) => t.state === 'queued').length === 0}
+                className="flex-1 bg-emerald-600 text-white rounded-xl px-4 py-4 shadow-2xl hover:bg-emerald-700 active:scale-95 font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⚡ 일괄 시작
+              </button>
+            </div>
+          </div>
         )}
 
         <Toaster />
