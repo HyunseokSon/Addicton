@@ -53,7 +53,7 @@ export function CourtCard({
 
   if (court.status === 'available') {
     return (
-      <div className="h-40 md:h-56 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center transition-all hover:border-gray-400 hover:shadow-sm">
+      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center transition-all hover:border-gray-400 hover:shadow-sm py-12 md:py-16">
         <div className="text-center">
           <div className="text-gray-500 mb-1.5 text-sm md:text-base font-medium">{court.name}</div>
           <div className="text-[10px] md:text-xs text-gray-400 bg-white px-2 py-1 rounded-full border">경기 대기중</div>
@@ -63,10 +63,10 @@ export function CourtCard({
   }
 
   return (
-    <Card className="h-40 md:h-56 overflow-hidden border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-white shadow-md hover:shadow-xl transition-all">
-      <CardContent className="p-2.5 md:p-4 h-full flex flex-col">
+    <Card className="overflow-hidden border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-white shadow-md hover:shadow-xl transition-all">
+      <CardContent className="p-2.5 md:p-4 flex flex-col">
         {/* Court header */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-1.5 md:gap-2">
             <div className="size-1.5 md:size-2 rounded-full bg-emerald-500 animate-pulse"></div>
             <span className="font-semibold text-emerald-900 text-xs md:text-sm">{court.name}</span>
@@ -78,22 +78,34 @@ export function CourtCard({
         </div>
 
         {/* Players grid */}
-        <div className="grid grid-cols-2 gap-1 md:gap-1.5 flex-1 mb-2">
+        <div className="grid grid-cols-2 gap-1 md:gap-1.5 mb-2">
           {teamPlayers.map((player, idx) => (
             <div
               key={player.id}
-              className="bg-white rounded-md md:rounded-lg p-1 md:p-1.5 border border-emerald-200 flex items-center justify-center shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white rounded-md md:rounded-lg p-1 md:p-2 border border-emerald-200 flex flex-col items-center justify-center shadow-sm hover:shadow-md transition-shadow h-fit"
             >
-              <span className="text-[10px] md:text-xs font-medium text-gray-900 truncate px-0.5">{player.name}</span>
+              <span className="text-xs md:text-sm font-medium text-gray-900 truncate px-0.5 max-w-full">{player.name}</span>
+              <div className="flex items-center gap-0.5 md:gap-1 mt-0.5 md:mt-1">
+                {player.gender && (
+                  <Badge variant="outline" className="text-[9px] md:text-xs px-1 md:px-1.5 py-0 h-4 md:h-5">
+                    {player.gender}
+                  </Badge>
+                )}
+                {player.rank && (
+                  <Badge variant="outline" className="text-[9px] md:text-xs px-1 md:px-1.5 py-0 h-4 md:h-5 bg-amber-50 border-amber-300 text-amber-700">
+                    {player.rank}
+                  </Badge>
+                )}
+              </div>
             </div>
           ))}
           {/* Fill empty slots */}
           {Array.from({ length: 4 - teamPlayers.length }).map((_, idx) => (
             <div
               key={`empty-${idx}`}
-              className="bg-gray-50 rounded-md md:rounded-lg p-1 md:p-1.5 border border-dashed border-gray-300 flex items-center justify-center"
+              className="bg-gray-50 rounded-md md:rounded-lg p-1 md:p-1.5 border border-dashed border-gray-300 flex items-center justify-center h-fit"
             >
-              <span className="text-[9px] md:text-[10px] text-gray-400">빈 자리</span>
+              <span className="text-[10px] md:text-xs text-gray-400">빈 자리</span>
             </div>
           ))}
         </div>
@@ -102,7 +114,7 @@ export function CourtCard({
         <Button
           variant="destructive"
           size="sm"
-          className="w-full h-7 md:h-9 font-medium text-[10px] md:text-xs active:scale-95 transition-transform touch-manipulation shadow-sm hover:shadow-md"
+          className="w-full h-7 md:h-9 font-medium text-[10px] md:text-xs active:scale-95 transition-transform touch-manipulation shadow-sm hover:shadow-md flex-shrink-0"
           onClick={onEndGame}
           disabled={readOnly}
         >

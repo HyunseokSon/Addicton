@@ -14,9 +14,11 @@ interface TeamCardProps {
   onSwapBetweenTeams?: (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => void;
   availableCourtCount?: number;
   readOnly?: boolean;
+  isAdmin?: boolean;
+  onReturnToWaiting?: (playerId: string, teamId: string) => void;
 }
 
-export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlayer, onSwapBetweenTeams, availableCourtCount, readOnly }: TeamCardProps) {
+export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlayer, onSwapBetweenTeams, availableCourtCount, readOnly, isAdmin, onReturnToWaiting }: TeamCardProps) {
   const teamPlayers = players.filter((p) => team.playerIds.includes(p.id));
   
   const handleSwap = (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
@@ -35,7 +37,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
             <span className="font-semibold text-sm md:text-base">{team.name}</span>
           </div>
           <div className="flex gap-1.5 md:gap-2">
-            {!readOnly && team.state === 'queued' && onStartGame && (
+            {!readOnly && isAdmin && team.state === 'queued' && onStartGame && (
               <Button 
                 size="sm" 
                 onClick={onStartGame} 
@@ -46,7 +48,7 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                 게임 시작
               </Button>
             )}
-            {!readOnly && onDeleteTeam && (
+            {!readOnly && isAdmin && onDeleteTeam && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -80,6 +82,8 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                     onSwap={handleSwap}
                     onSwapBetweenTeams={onSwapBetweenTeams}
                     readOnly={readOnly}
+                    isAdmin={isAdmin}
+                    onReturnToWaiting={onReturnToWaiting}
                   />
                 </div>
               ))}
@@ -164,6 +168,8 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
                 onSwap={handleSwap}
                 onSwapBetweenTeams={onSwapBetweenTeams}
                 readOnly={readOnly}
+                isAdmin={isAdmin}
+                onReturnToWaiting={onReturnToWaiting}
               />
             ))}
             {/* Fill empty slots */}

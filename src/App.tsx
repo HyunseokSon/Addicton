@@ -8,15 +8,24 @@ import { DragDropProvider } from './components/DragDropProvider';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import { CourtCard } from './components/CourtCard';
+import { CourtSettingsDialog } from './components/CourtSettingsDialog';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { RefreshCw, LogOut, KeyRound } from 'lucide-react';
+import { RefreshCw, LogOut, KeyRound, Settings, RotateCcw } from 'lucide-react';
 import addictonLogo from 'figma:asset/3326f21ff08f9b7816589961d903cd0071089100.png';
 import { useState, useEffect } from 'react';
 import { RoleSelection } from './components/RoleSelection';
 import { PasswordChangeDialog } from './components/PasswordChangeDialog';
 import { LoadingModal } from './components/LoadingModal';
+import { projectId, publicAnonKey } from './utils/supabase/info';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu';
 
 type UserRole = 'admin' | 'member' | null;
 
@@ -31,6 +40,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [showCourtSettings, setShowCourtSettings] = useState(false);
   const [loadingModal, setLoadingModal] = useState<{
     open: boolean;
     title: string;
@@ -57,6 +67,7 @@ export default function App() {
     endGame,
     toggleCourtPause,
     updateCourtTimer,
+    updateCourtNames,
     adjustGameCount,
     deleteTeam,
     updateTeam,
@@ -109,32 +120,14 @@ export default function App() {
     try {
       await performAutoMatch();
       
-      // Wait a bit for Supabase to process
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '팀 매칭 중',
-        description: '매칭이 완료되었습니다. 데이터를 새로고침합니다...',
-        status: 'loading',
-      });
-
-      // Auto sync to reflect changes
-      await syncFromSupabase();
-
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '팀 매칭 완료',
+      // Close modal and show success toast immediately
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('팀 매칭 완료', {
         description: `${newTeamsCount}개 팀이 생성되었습니다.`,
-        status: 'success',
       });
 
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
+      // Background sync without waiting
+      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Auto match failed:', error);
@@ -186,29 +179,14 @@ export default function App() {
     try {
       await startAllQueuedGames();
       
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '게임 일괄 시작 중',
-        description: '게임이 시작되었습니다. 데이터를 새로고침합니다...',
-        status: 'loading',
-      });
-
-      // Auto sync to reflect changes
-      await syncFromSupabase();
-
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '게임 시작 완료',
+      // Close modal and show success toast immediately
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('게임 시작 완료', {
         description: `${teamsToStart}개 팀의 게임이 시작되었습니다.`,
-        status: 'success',
       });
 
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
+      // Background sync without waiting
+      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Start all games failed:', error);
@@ -239,29 +217,14 @@ export default function App() {
     try {
       await endGame(courtId);
       
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '게임 종료 중',
-        description: '게임이 종료되었습니다. 데이터를 새로고침합니다...',
-        status: 'loading',
-      });
-
-      // Auto sync to reflect changes
-      await syncFromSupabase();
-
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '게임 종료 완료',
+      // Close modal and show success toast immediately
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('게임 종료 완료', {
         description: '참가자들이 대기 상태로 전환되었습니다.',
-        status: 'success',
       });
 
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
+      // Background sync without waiting
+      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('End game failed:', error);
@@ -311,29 +274,14 @@ export default function App() {
       await updatePlayer(queuedPlayerId, { state: 'waiting' });
       console.log('✅ Player states updated in Supabase');
 
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '참가자 교체 중',
-        description: '교체가 완료되었습니다. 데이터를 새로고침합니다...',
-        status: 'loading',
-      });
-
-      // Auto sync to reflect changes
-      await syncFromSupabase();
-
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '참가자 교체 완료',
+      // Close modal and show success toast immediately
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('참가자 교체 완료', {
         description: `${waitingPlayer.name}님과 ${queuedPlayer.name}님이 교체되었습니다.`,
-        status: 'success',
       });
 
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
+      // Background sync without waiting
+      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Swap player failed:', error);
@@ -346,18 +294,20 @@ export default function App() {
     }
   };
 
-  const handleSwapBetweenTeams = (dragTeamId: string, dragPlayerId: string, dropTeamId: string) => {
+  const handleSwapBetweenTeams = (dragTeamId: string, dragPlayerId: string, dropTeamId: string, dropPlayerId: string) => {
     const dragTeam = state.teams.find((t) => t.id === dragTeamId);
     const dropTeam = state.teams.find((t) => t.id === dropTeamId);
     if (!dragTeam || !dropTeam) return;
 
+    // Find the positions of both players in their respective teams
     const dragPlayerIndex = dragTeam.playerIds.indexOf(dragPlayerId);
-    const dropPlayerId = dropTeam.playerIds[dragPlayerIndex];
+    const dropPlayerIndex = dropTeam.playerIds.indexOf(dropPlayerId);
 
+    // Swap the players
     const newDragPlayerIds = [...dragTeam.playerIds];
     const newDropPlayerIds = [...dropTeam.playerIds];
     newDragPlayerIds[dragPlayerIndex] = dropPlayerId;
-    newDropPlayerIds[dragPlayerIndex] = dragPlayerId;
+    newDropPlayerIds[dropPlayerIndex] = dragPlayerId;
 
     updateTeam(dragTeamId, newDragPlayerIds);
     updateTeam(dropTeamId, newDropPlayerIds);
@@ -419,18 +369,11 @@ export default function App() {
       // Auto sync to reflect changes
       await syncFromSupabase();
 
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '전체 삭제 완료',
+      // Close modal and show success toast
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('전체 삭제 완료', {
         description: `${deletedCount}명의 참가자가 삭제되었습니다.`,
-        status: 'success',
       });
-
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
 
     } catch (error) {
       console.error('Batch delete failed:', error);
@@ -439,6 +382,57 @@ export default function App() {
         title: '삭제 실패',
         status: 'error',
         errorMessage: '삭제 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
+  };
+
+  const handleRemoveAllWaiting = async () => {
+    const waitingPlayers = state.players.filter((p) => p.state === 'waiting' || p.state === 'priority');
+    
+    if (waitingPlayers.length === 0) {
+      toast.error('미참가 전환 실패', {
+        description: '대기중인 참가자가 없습니다.',
+      });
+      return;
+    }
+
+    // Show loading modal
+    setLoadingModal({
+      open: true,
+      title: '미참가 전환 중',
+      description: `${waitingPlayers.length}명의 참가자를 미참가 상태로 전환하고 있습니다...`,
+      status: 'loading',
+    });
+
+    try {
+      // Use batch delete API to remove from players table
+      const playerIds = waitingPlayers.map((p) => p.id);
+      const deletedCount = await deletePlayers(playerIds);
+      
+      // Show success and sync data
+      setLoadingModal({
+        open: true,
+        title: '미참가 전환 중',
+        description: `${deletedCount}명의 참가자가 미참가 상태로 전환되었습니다. 데이터를 새로고침합니다...`,
+        status: 'loading',
+      });
+
+      // Auto sync to reflect changes
+      await syncFromSupabase();
+
+      // Close modal and show success toast
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('미참가 전환 완료', {
+        description: `${deletedCount}명의 참가자가 미참가 상태로 전환되었습니다.`,
+      });
+
+    } catch (error) {
+      console.error('Batch remove failed:', error);
+      setLoadingModal({
+        open: true,
+        title: '미참가 전환 실패',
+        status: 'error',
+        errorMessage: '전환 중 오류가 발생했습니다. 다시 시도해주세요.',
       });
     }
   };
@@ -475,18 +469,11 @@ export default function App() {
       // Auto sync to reflect changes
       await syncFromSupabase();
 
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '초기화 완료',
+      // Close modal and show success toast
+      setLoadingModal(prev => ({ ...prev, open: false }));
+      toast.success('초기화 완료', {
         description: '모든 게임과 팀이 초기화되었습니다.',
-        status: 'success',
       });
-
-      // Auto close after 1.5 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 1500);
 
     } catch (error) {
       console.error('Reset session failed:', error);
@@ -494,7 +481,7 @@ export default function App() {
         open: true,
         title: '초기화 실패',
         status: 'error',
-        errorMessage: '초기화 중 오류가 발생했습니다. 다시 시도해주세요.',
+        errorMessage: '초기화 중 오류가 생했습니다. 다시 시도해주세요.',
       });
     }
   };
@@ -524,213 +511,230 @@ export default function App() {
         {/* Header */}
         <header className="bg-white/90 backdrop-blur-sm border-b shadow-sm sticky top-0 z-50">
           <div className="container mx-auto px-3 md:px-6 py-2.5 md:py-3.5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
+            <div className="flex items-center justify-between gap-2 md:gap-3">
               <div className="flex items-center gap-2 md:gap-3">
                 <div>
-                  <h1 className="text-base md:text-xl bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
+                  <h1 className="text-sm md:text-base lg:text-xl font-bold text-gray-900">
                     {state.session?.name || '에딕턴 게임 매칭'}
                   </h1>
-                  <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">
+                  <p className="hidden md:block text-[10px] md:text-xs text-muted-foreground mt-0.5">
                     실시간 팀 매칭 시스템
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+              <div className="flex items-center gap-1 md:gap-2">
                 {isAdmin && (
                   <>
-                    <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1.5 border text-sm shadow-sm">
+                    <div className="flex items-center gap-0.5 md:gap-1 bg-white rounded-lg px-1.5 md:px-2 py-1 md:py-1.5 border">
                       <button
                         onClick={() => updateSession({ courtsCount: Math.max(1, (state.session?.courtsCount || 4) - 1) })}
-                        className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
+                        className="size-6 md:size-7 rounded hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all"
                       >
                         <span className="text-base md:text-lg">−</span>
                       </button>
-                      <span className="text-[10px] md:text-xs font-semibold min-w-[2.5rem] md:min-w-[3rem] text-center">
+                      <span className="text-[10px] md:text-xs font-medium min-w-[2.5rem] md:min-w-[3rem] text-center">
                         코트 {state.session?.courtsCount || 4}
                       </span>
                       <button
                         onClick={() => updateSession({ courtsCount: Math.min(8, (state.session?.courtsCount || 4) + 1) })}
-                        className="size-7 md:size-8 rounded bg-white border hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all touch-manipulation"
+                        className="size-6 md:size-7 rounded hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all"
                       >
                         <span className="text-base md:text-lg">+</span>
                       </button>
                     </div>
-                    <div className="px-2.5 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
-                      <span className="text-[10px] md:text-xs font-semibold text-blue-700">4인팀</span>
-                    </div>
                     <button
                       onClick={handleAutoMatch}
-                      className="px-3 py-1.5 md:px-5 md:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 active:scale-95 font-semibold shadow-md hover:shadow-lg transition-all text-[11px] md:text-sm touch-manipulation"
+                      className="hidden md:inline-flex px-2 md:px-4 py-1 md:py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 font-medium text-[10px] md:text-xs transition-all items-center"
                     >
-                      🎯 팀 매칭
-                    </button>
-                    <button
-                      onClick={handleResetSession}
-                      className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation"
-                    >
-                      초기화
-                    </button>
-                    <button
-                      onClick={() => setShowPasswordChange(true)}
-                      className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation flex items-center gap-1.5"
-                    >
-                      <KeyRound className="size-4 md:size-5" />
-                      <span className="hidden sm:inline">비밀번호 변경</span>
+                      🔵 팀 매칭
                     </button>
                   </>
                 )}
-                {!isAdmin && (
-                  <div className="px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200 shadow-sm">
-                    <span className="text-[10px] md:text-xs font-semibold text-emerald-700">회원 (조회 전용)</span>
-                  </div>
-                )}
-                <button
-                  onClick={handleSyncFromSupabase}
-                  disabled={isSyncing}
-                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                  title="Supabase에서 동기화"
-                >
-                  <RefreshCw className={`size-4 md:size-5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{isSyncing ? '동기화 중...' : '새로고침'}</span>
-                </button>
-                <button
-                  onClick={() => setUserRole(null)}
-                  className="px-3 py-1.5 md:px-4 md:py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:scale-95 font-medium transition-all text-[11px] md:text-sm touch-manipulation flex items-center gap-1.5"
-                  title="역할 변경"
-                >
-                  <LogOut className="size-4 md:size-5" />
-                  <span className="hidden sm:inline">로그아웃</span>
-                </button>
+                
+                {/* Settings Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1.5 md:p-2 border rounded-lg hover:bg-gray-50 active:scale-95 transition-all">
+                      <Settings className="size-4 md:size-4.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem onClick={handleResetSession}>
+                          <RotateCcw className="size-4 mr-2" />
+                          초기화
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setShowPasswordChange(true)}>
+                          <KeyRound className="size-4 mr-2" />
+                          비밀번호 변경
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem onClick={handleSyncFromSupabase} disabled={isSyncing}>
+                      <RefreshCw className={`size-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                      새로고침
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setUserRole(null)} className="text-red-600">
+                      <LogOut className="size-4 mr-2" />
+                      로그아웃
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="container mx-auto px-3 md:px-6 py-3 md:py-5 pb-6 md:pb-8 space-y-3 md:space-y-5">
-          {/* Courts Section */}
-          <div className="bg-white rounded-xl border shadow-sm">
-            <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-emerald-50/50 to-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="size-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                <h2 className="font-semibold text-sm md:text-base">코트 현황</h2>
-              </div>
-              <span className="text-[10px] md:text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
-                {state.courts.filter(c => c.status === 'occupied').length}/{state.courts.length} 사용중
-              </span>
+        {/* Main Content - New Layout: Court on top, two columns below */}
+        <main className="container mx-auto px-3 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
+          
+          {/* Court Section - Full Width */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                코트 현황
+              </h2>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowCourtSettings(true)}
+                  className="px-2 md:px-3 py-1 md:py-1.5 text-xs border rounded-lg hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  코트 설정
+                </button>
+              )}
             </div>
-            <div className="p-2.5 md:p-5">
-              <div className={`grid gap-2.5 md:gap-4 ${getCourtGridCols(state.session?.courtsCount || 4)}`}>
-                {state.courts.map((court) => {
-                  const team = court.currentTeamId
-                    ? state.teams.find((t) => t.id === court.currentTeamId) || null
-                    : null;
-                  return (
-                    <CourtCard
-                      key={court.id}
-                      court={court}
-                      team={team}
-                      players={state.players}
-                      onTogglePause={() => toggleCourtPause(court.id)}
-                      onEndGame={() => handleEndGame(court.id)}
-                      onUpdateTimer={(deltaMs) => updateCourtTimer(court.id, deltaMs)}
-                      readOnly={!isAdmin}
-                    />
-                  );
-                })}
-              </div>
+            <div className={`grid ${getCourtGridCols(state.session?.courtsCount || 4)} gap-3`}>
+              {state.courts.slice(0, state.session?.courtsCount || 4).map((court) => (
+                <CourtCard
+                  key={court.id}
+                  court={court}
+                  team={state.teams.find((t) => t.id === court.currentTeamId)}
+                  players={state.players}
+                  onEndGame={() => handleEndGame(court.id)}
+                  onPauseToggle={() => toggleCourtPause(court.id)}
+                  onTimerUpdate={(deltaMs) => updateCourtTimer(court.id, deltaMs)}
+                  readOnly={!isAdmin}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Bottom Section: Participants and Queued Teams */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5 pb-4 md:pb-6">
-            {/* Left: Participant/Member Management */}
-            <div className="bg-white rounded-xl border shadow-sm order-2 lg:order-1">
-              <Tabs defaultValue="players" className="w-full">
-                <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-blue-50/50 to-white">
-                  <TabsList className="grid w-full grid-cols-2 h-9 md:h-10">
-                    <TabsTrigger value="players" className="text-xs md:text-sm">참가자 관리</TabsTrigger>
-                    <TabsTrigger value="members" className="text-xs md:text-sm">모임원 관리</TabsTrigger>
+          {/* Two Column Layout Below */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            
+            {/* Left Column - Waiting Players */}
+            <div className="space-y-4 md:space-y-6">
+              {/* Player Panel */}
+              <div>
+                <Tabs defaultValue="waiting" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-3">
+                    <TabsTrigger value="waiting" className="text-xs">대기 중</TabsTrigger>
+                    <TabsTrigger value="management" className="text-xs">모임원 관리</TabsTrigger>
                   </TabsList>
-                </div>
-                <div className="p-3 md:p-5">
-                  <TabsContent value="players" className="mt-0">
+
+                  <TabsContent value="waiting">
                     <PlayerPanel
                       players={state.players}
-                      teams={state.teams}
                       onAddPlayer={addPlayer}
-                      onUpdatePlayer={deletePlayer}
-                      onUpdatePlayerState={updatePlayerState}
+                      onUpdatePlayer={updatePlayer}
                       onDeletePlayer={deletePlayer}
+                      onUpdatePlayerState={updatePlayerState}
                       onAdjustGameCount={adjustGameCount}
-                      onReturnToWaiting={handleReturnToWaiting}
-                      onSwapPlayer={handleSwapPlayer}
-                      onDeleteAllWaitingPlayers={handleDeleteAllWaiting}
+                      onRemoveAllWaiting={handleRemoveAllWaiting}
                       readOnly={!isAdmin}
                     />
                   </TabsContent>
-                  <TabsContent value="members" className="mt-0">
-                    <MemberManagement
-                      members={state.members}
-                      players={state.players}
-                      onAddMember={addMember}
-                      onUpdateMember={updateMember}
-                      onDeleteMember={deleteMember}
-                      onAddMemberAsPlayer={addMemberAsPlayer}
-                      addMembersAsPlayers={addMembersAsPlayers}
-                      syncFromSupabase={syncFromSupabase}
-                      resetMembers={resetMembers}
-                      setLoadingModal={setLoadingModal}
-                      readOnly={!isAdmin}
-                    />
+
+                  <TabsContent value="management">
+                    {isAdmin ? (
+                      <MemberManagement
+                        members={state.members}
+                        players={state.players}
+                        onAddMember={addMember}
+                        onUpdateMember={updateMember}
+                        onDeleteMember={deleteMember}
+                        onAddMemberAsPlayer={addMemberAsPlayer}
+                        addMembersAsPlayers={addMembersAsPlayers}
+                        syncFromSupabase={syncFromSupabase}
+                        resetMembers={resetMembers}
+                        setLoadingModal={setLoadingModal}
+                      />
+                    ) : (
+                      <div className="text-center py-8 text-sm text-muted-foreground">
+                        관리자 권한이 필요합니다
+                      </div>
+                    )}
                   </TabsContent>
-                </div>
-              </Tabs>
+                </Tabs>
+              </div>
             </div>
 
-            {/* Right: Game Queue */}
-            <div className="bg-white rounded-xl border shadow-sm order-1 lg:order-2">
-              <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b bg-gradient-to-r from-orange-50/50 to-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="size-2 rounded-full bg-orange-500 animate-pulse"></div>
-                  <h2 className="font-semibold text-sm md:text-base">게임 대기중</h2>
+            {/* Right Column - Queued Teams */}
+            <div className="space-y-4 md:space-y-6">
+              {/* Matching Area */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                    게임 대기중
+                  </h2>
+                  <button className="text-xs text-gray-500">이력 사용중</button>
                 </div>
-                <span className="text-[10px] md:text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
-                  {state.teams.filter(t => t.state === 'queued').length}/{state.session?.courtsCount || 4}팀
-                </span>
-              </div>
-              <div className="p-3 md:p-5">
                 <MatchingArea
-                  teams={state.teams}
-                  courts={state.courts}
+                  teams={state.teams.filter((t) => t.state === 'queued')}
                   players={state.players}
                   onStartGame={handleStartGame}
-                  onStartAllQueuedGames={handleStartAllQueuedGames}
-                  onEndGame={handleEndGame}
-                  onToggleCourtPause={toggleCourtPause}
-                  onUpdateCourtTimer={updateCourtTimer}
-                  onDeleteTeam={deleteTeam}
+                  onStartAllGames={handleStartAllQueuedGames}
                   onSwapPlayer={handleSwapPlayer}
                   onSwapBetweenTeams={handleSwapBetweenTeams}
-                  readOnly={!isAdmin}
+                  onReturnToWaiting={handleReturnToWaiting}
+                  onDeleteTeam={deleteTeam}
+                  isAdmin={isAdmin}
                 />
               </div>
             </div>
           </div>
-        </div>
+        </main>
 
-        <Toaster position="bottom-right" duration={2000} />
+        {/* Password Change Dialog */}
         <PasswordChangeDialog
           open={showPasswordChange}
           onOpenChange={setShowPasswordChange}
         />
+
+        {/* Court Settings Dialog */}
+        <CourtSettingsDialog
+          open={showCourtSettings}
+          onOpenChange={setShowCourtSettings}
+          courts={state.courts}
+          onUpdateCourtNames={updateCourtNames}
+        />
+
+        {/* Loading Modal */}
         <LoadingModal
           open={loadingModal.open}
+          onOpenChange={(open) => setLoadingModal(prev => ({ ...prev, open }))}
           title={loadingModal.title}
           description={loadingModal.description}
           status={loadingModal.status}
           errorMessage={loadingModal.errorMessage}
-          onClose={() => setLoadingModal(prev => ({ ...prev, open: false }))}
         />
+
+        {/* Mobile Floating Match Button */}
+        {isAdmin && (
+          <button
+            onClick={handleAutoMatch}
+            className="md:hidden fixed bottom-6 right-6 z-50 bg-blue-600 text-white rounded-full px-6 py-4 shadow-2xl hover:bg-blue-700 active:scale-95 font-bold text-sm transition-all flex items-center gap-2"
+          >
+            🔵 팀 매칭
+          </button>
+        )}
+
+        <Toaster />
       </div>
     </DndProvider>
   );

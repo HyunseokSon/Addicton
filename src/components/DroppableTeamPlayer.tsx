@@ -17,6 +17,7 @@ interface DroppableTeamPlayerProps {
   onSwapBetweenTeams?: (sourceTeamId: string, sourcePlayerId: string, targetTeamId: string, targetPlayerId: string) => void;
   onReturnToWaiting?: (playerId: string, teamId: string) => void;
   readOnly?: boolean;
+  isAdmin?: boolean;
 }
 
 export function DroppableTeamPlayer({
@@ -29,24 +30,28 @@ export function DroppableTeamPlayer({
   onSwapBetweenTeams,
   onReturnToWaiting,
   readOnly,
+  isAdmin,
 }: DroppableTeamPlayerProps) {
   const [showSwapDialog, setShowSwapDialog] = useState(false);
 
-  // Make queued players draggable (only if not readOnly)
+  // Disable drag/drop if not admin
+  const canDragDrop = !readOnly && isAdmin;
+
+  // Make queued players draggable (only if admin and not readOnly)
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.QUEUED_PLAYER,
     item: { playerId: player.id, teamId },
-    canDrag: !readOnly,
+    canDrag: canDragDrop,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }), [player.id, teamId, readOnly]);
+  }), [player.id, teamId, canDragDrop]);
 
-  // Accept both waiting and queued players for drop (only if not readOnly)
+  // Accept both waiting and queued players for drop (only if admin and not readOnly)
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: [ItemTypes.WAITING_PLAYER, ItemTypes.QUEUED_PLAYER],
     drop: (item: { playerId: string; teamId?: string }) => {
-      if (readOnly) return;
+      if (!canDragDrop) return;
       if (item.teamId && item.teamId !== teamId) {
         // Swap between two different teams (queued <-> queued)
         if (onSwapBetweenTeams) {
@@ -58,14 +63,14 @@ export function DroppableTeamPlayer({
       }
     },
     canDrop: (item) => {
-      // Can't drop on self or if readOnly
-      return !readOnly && item.playerId !== player.id;
+      // Can't drop on self or if not admin
+      return canDragDrop && item.playerId !== player.id;
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
     }),
-  }), [player.id, teamId, onSwap, onSwapBetweenTeams, readOnly]);
+  }), [player.id, teamId, onSwap, onSwapBetweenTeams, canDragDrop]);
 
   const showDropIndicator = isOver && canDrop;
 
@@ -87,9 +92,9 @@ export function DroppableTeamPlayer({
   return (
     <>
       <div
-        ref={readOnly ? null : attachRef}
+        ref={canDragDrop ? attachRef : null}
         className={`relative bg-white rounded-lg p-2.5 xl:p-4 border-2 transition-all shadow-sm min-w-0 ${
-          readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+          canDragDrop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
         } ${
           showDropIndicator
             ? 'bg-blue-50 border-blue-400 shadow-md'
@@ -100,21 +105,23 @@ export function DroppableTeamPlayer({
       >
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 min-w-0">
           <div className="flex items-center gap-1.5 xl:gap-2 min-w-0 flex-1">
-            <span className="text-sm xl:text-base">{player.name}</span>
+            <span className="text-sm xl:text-base truncate">{player.name}</span>
             {player.gender && (
-              <span className="text-xs xl:text-sm text-gray-500 flex-shrink-0">{player.gender}</span>
+              <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0 flex-shrink-0">
+                {player.gender}
+              </Badge>
             )}
-          </div>
-          <div className="flex items-center gap-1.5 xl:gap-2 flex-shrink-0">
             {player.rank && (
-              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 px-2 py-0.5 text-xs">
+              <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0 bg-amber-50 border-amber-300 text-amber-700 flex-shrink-0">
                 {player.rank}
               </Badge>
             )}
+          </div>
+          <div className="flex items-center gap-1.5 xl:gap-2 flex-shrink-0">
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 px-2 py-0.5 text-xs whitespace-nowrap">
               {player.gameCount}회
             </Badge>
-            {!readOnly && (
+            {canDragDrop && (
               <Button
                 size="sm"
                 variant="ghost"

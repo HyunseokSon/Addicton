@@ -32,7 +32,7 @@ interface PlayerPanelProps {
   onAdjustGameCount: (id: string, delta: number) => void;
   onReturnToWaiting: (playerId: string, teamId: string) => void;
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
-  onDeleteAllWaitingPlayers?: () => void;
+  onRemoveAllWaiting?: () => void;
   readOnly?: boolean;
 }
 
@@ -62,7 +62,7 @@ export function PlayerPanel({
   onAdjustGameCount,
   onReturnToWaiting,
   onSwapPlayer,
-  onDeleteAllWaitingPlayers,
+  onRemoveAllWaiting,
   readOnly,
 }: PlayerPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,19 +116,23 @@ export function PlayerPanel({
               {waitingPlayers.length}명
             </Badge>
           </div>
-          {waitingPlayers.length > 0 && onDeleteAllWaitingPlayers && !readOnly && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onDeleteAllWaitingPlayers}
-              className="h-6 px-2 hover:bg-red-50 text-[10px] md:text-xs text-red-600"
-            >
-              <Trash2 className="size-3 mr-1" />
-              전체 삭제
-            </Button>
+          {waitingPlayers.length > 0 && !readOnly && (
+            <div className="flex items-center gap-1">
+              {onRemoveAllWaiting && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onRemoveAllWaiting}
+                  className="h-6 px-2 hover:bg-orange-50 text-[10px] md:text-xs text-orange-600"
+                >
+                  <X className="size-3 mr-1" />
+                  일괄 미참가 처리
+                </Button>
+              )}
+            </div>
           )}
         </div>
-        <div className="space-y-1.5 md:space-y-2 min-h-[100px] bg-gradient-to-br from-blue-50/30 to-blue-50/10 rounded-xl border-2 border-dashed border-blue-200 p-2.5 md:p-3">
+        <div className="space-y-1.5 md:space-y-2 min-h-[100px] max-h-[50vh] md:max-h-none overflow-y-auto bg-gradient-to-br from-blue-50/30 to-blue-50/10 rounded-xl border-2 border-dashed border-blue-200 p-2.5 md:p-3">
           {waitingPlayers.length === 0 ? (
             <p className="text-[10px] md:text-xs text-center text-gray-400 py-8">대기중인 참가자가 없습니다</p>
           ) : (
@@ -165,7 +169,7 @@ export function PlayerPanel({
               {queuedPlayers.length}명
             </Badge>
           </div>
-          <div className="space-y-1.5 md:space-y-2 bg-orange-50/50 rounded-xl border border-orange-200 p-2.5 md:p-3">
+          <div className="space-y-1.5 md:space-y-2 bg-orange-50/50 rounded-xl border border-orange-200 p-2.5 md:p-3 max-h-[300px] md:max-h-[400px] overflow-y-auto">
             {queuedPlayers.map((player) => {
               const team = teams?.find(t => t.playerIds.includes(player.id));
               return (
@@ -368,7 +372,7 @@ function WaitingPlayerCard({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <GripVertical className="size-4 text-gray-400 shrink-0" />
+              {!readOnly && <GripVertical className="size-4 text-gray-400 shrink-0" />}
               <span className="font-medium text-sm truncate">{player.name}</span>
               {player.gender && (
                 <Badge variant="outline" className="text-xs px-1.5 py-0">

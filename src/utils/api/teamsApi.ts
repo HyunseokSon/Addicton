@@ -28,22 +28,36 @@ export const teamsApi = {
 
     const data = await response.json();
     
-    // Parse dates
-    return data.map((team: any) => ({
-      ...team,
-      startedAt: team.startedAt ? new Date(team.startedAt) : null,
-      endedAt: team.endedAt ? new Date(team.endedAt) : null,
+    // Convert snake_case to camelCase and parse dates
+    return (data || []).map((team: any) => ({
+      id: team.id,
+      name: team.name,
+      playerIds: team.player_ids || [],
+      state: team.state,
+      assignedCourtId: team.assigned_court_id || null,
+      startedAt: team.started_at ? new Date(team.started_at) : null,
+      endedAt: team.ended_at ? new Date(team.ended_at) : null,
     }));
   },
 
   async add(team: TeamData): Promise<void> {
+    // Only send fields that exist in the DB
+    const dbTeam = {
+      id: team.id,
+      name: team.name,
+      player_ids: team.playerIds,
+      state: team.state,
+      started_at: team.startedAt?.toISOString() || null,
+      ended_at: team.endedAt?.toISOString() || null,
+    };
+    
     const response = await fetch(`${API_BASE}/teams`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(team),
+      body: JSON.stringify(dbTeam),
     });
 
     if (!response.ok) {
@@ -52,13 +66,23 @@ export const teamsApi = {
   },
 
   async addBatch(teams: TeamData[]): Promise<void> {
+    // Only send fields that exist in the DB
+    const teamsForDb = teams.map(t => ({
+      id: t.id,
+      name: t.name,
+      player_ids: t.playerIds,
+      state: t.state,
+      started_at: t.startedAt?.toISOString() || null,
+      ended_at: t.endedAt?.toISOString() || null,
+    }));
+    
     const response = await fetch(`${API_BASE}/teams/batch`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ teams }),
+      body: JSON.stringify({ teams: teamsForDb }),
     });
 
     if (!response.ok) {
@@ -67,13 +91,22 @@ export const teamsApi = {
   },
 
   async update(teamId: string, updates: Partial<TeamData>): Promise<void> {
+    // Only send fields that exist in the DB
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.playerIds !== undefined) dbUpdates.player_ids = updates.playerIds;
+    if (updates.state !== undefined) dbUpdates.state = updates.state;
+    if (updates.assignedCourtId !== undefined) dbUpdates.assigned_court_id = updates.assignedCourtId;
+    if (updates.startedAt !== undefined) dbUpdates.started_at = updates.startedAt?.toISOString() || null;
+    if (updates.endedAt !== undefined) dbUpdates.ended_at = updates.endedAt?.toISOString() || null;
+    
     const response = await fetch(`${API_BASE}/teams/${teamId}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(updates),
+      body: JSON.stringify(dbUpdates),
     });
 
     if (!response.ok) {

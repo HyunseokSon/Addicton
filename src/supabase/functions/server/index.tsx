@@ -1,6 +1,7 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
+import * as db from "./db.tsx";
 import * as kv from "./kv_store.tsx";
 const app = new Hono();
 
@@ -27,8 +28,8 @@ app.get("/make-server-41b22d2d/health", (c) => {
 // Get all members
 app.get("/make-server-41b22d2d/members", async (c) => {
   try {
-    const members = await kv.get("members");
-    return c.json({ members: members || [] });
+    const members = await db.getAllMembers();
+    return c.json({ members });
   } catch (error) {
     console.error("Error getting members:", error);
     return c.json({ error: "Failed to get members", details: String(error) }, 500);
@@ -45,11 +46,9 @@ app.post("/make-server-41b22d2d/members", async (c) => {
       return c.json({ error: "Invalid member data" }, 400);
     }
 
-    const members = (await kv.get("members")) || [];
-    const updatedMembers = [...members, member];
-    await kv.set("members", updatedMembers);
+    const addedMember = await db.addMember(member);
     
-    return c.json({ member, success: true });
+    return c.json({ member: addedMember, success: true });
   } catch (error) {
     console.error("Error adding member:", error);
     return c.json({ error: "Failed to add member", details: String(error) }, 500);
@@ -67,11 +66,7 @@ app.put("/make-server-41b22d2d/members/:id", async (c) => {
       return c.json({ error: "Invalid request data" }, 400);
     }
 
-    const members = (await kv.get("members")) || [];
-    const updatedMembers = members.map((m: any) =>
-      m.id === memberId ? { ...m, ...updates } : m
-    );
-    await kv.set("members", updatedMembers);
+    await db.updateMember(memberId, updates);
     
     return c.json({ success: true });
   } catch (error) {
@@ -89,9 +84,7 @@ app.delete("/make-server-41b22d2d/members/:id", async (c) => {
       return c.json({ error: "Invalid member ID" }, 400);
     }
 
-    const members = (await kv.get("members")) || [];
-    const updatedMembers = members.filter((m: any) => m.id !== memberId);
-    await kv.set("members", updatedMembers);
+    await db.deleteMember(memberId);
     
     return c.json({ success: true });
   } catch (error) {
@@ -110,9 +103,7 @@ app.post("/make-server-41b22d2d/members/batch", async (c) => {
       return c.json({ error: "Invalid members data" }, 400);
     }
 
-    const existingMembers = (await kv.get("members")) || [];
-    const updatedMembers = [...existingMembers, ...newMembers];
-    await kv.set("members", updatedMembers);
+    await db.batchAddMembers(newMembers);
     
     console.log(`✅ Batch added ${newMembers.length} members`);
     return c.json({ success: true, count: newMembers.length });
@@ -125,10 +116,10 @@ app.post("/make-server-41b22d2d/members/batch", async (c) => {
 // Delete all members
 app.delete("/make-server-41b22d2d/members/all", async (c) => {
   try {
-    const members = (await kv.get("members")) || [];
+    const members = await db.getAllMembers();
     const count = members.length;
     
-    await kv.set("members", []);
+    await db.deleteAllMembers();
     
     console.log(`✅ Deleted all ${count} members`);
     return c.json({ success: true, deletedCount: count });
@@ -148,11 +139,11 @@ app.post("/make-server-41b22d2d/members/reset", async (c) => {
     }
     
     // Get current count
-    const oldMembers = (await kv.get("members")) || [];
+    const oldMembers = await db.getAllMembers();
     const deletedCount = oldMembers.length;
     
     // Atomic reset: delete all and set new ones
-    await kv.set("members", newMembers);
+    await db.resetMembers(newMembers);
     
     console.log(`✅ Reset members: deleted ${deletedCount}, added ${newMembers.length}`);
     return c.json({ success: true, deletedCount, addedCount: newMembers.length });
@@ -165,47 +156,41 @@ app.post("/make-server-41b22d2d/members/reset", async (c) => {
 // Migrate gender values from 'male'/'female' to '남'/'녀'
 app.post("/make-server-41b22d2d/members/migrate-gender", async (c) => {
   try {
-    const members = (await kv.get("members")) || [];
-    const players = (await kv.get("players")) || [];
+    const members = await db.getAllMembers();
+    const players = await db.getAllPlayers();
     
     let membersUpdated = 0;
     let playersUpdated = 0;
     
     // Migrate members
-    const updatedMembers = members.map((member: any) => {
+    for (const member of members) {
       if (member.gender === 'male') {
+        await db.updateMember(member.id, { gender: '남' });
         membersUpdated++;
-        return { ...member, gender: '남' };
       } else if (member.gender === 'female') {
+        await db.updateMember(member.id, { gender: '녀' });
         membersUpdated++;
-        return { ...member, gender: '녀' };
       }
-      return member;
-    });
+    }
     
     // Migrate players
-    const updatedPlayers = players.map((player: any) => {
+    for (const player of players) {
       if (player.gender === 'male') {
+        await db.updatePlayer(player.id, { gender: '남' });
         playersUpdated++;
-        return { ...player, gender: '남' };
       } else if (player.gender === 'female') {
+        await db.updatePlayer(player.id, { gender: '녀' });
         playersUpdated++;
-        return { ...player, gender: '녀' };
       }
-      return player;
-    });
-    
-    // Save updated data
-    await kv.set("members", updatedMembers);
-    await kv.set("players", updatedPlayers);
+    }
     
     console.log(`✅ Gender migration complete: ${membersUpdated} members, ${playersUpdated} players updated`);
     return c.json({ 
       success: true, 
       membersUpdated, 
       playersUpdated,
-      totalMembers: updatedMembers.length,
-      totalPlayers: updatedPlayers.length,
+      totalMembers: members.length,
+      totalPlayers: players.length,
     });
   } catch (error) {
     console.error("Error migrating gender values:", error);
@@ -218,8 +203,8 @@ app.post("/make-server-41b22d2d/members/migrate-gender", async (c) => {
 // Get all players
 app.get("/make-server-41b22d2d/players", async (c) => {
   try {
-    const players = await kv.get("players");
-    return c.json(players || []);
+    const players = await db.getAllPlayers();
+    return c.json(players);
   } catch (error) {
     console.error("Error getting players:", error);
     return c.json({ error: "Failed to get players", details: String(error) }, 500);
@@ -235,11 +220,12 @@ app.post("/make-server-41b22d2d/players", async (c) => {
       return c.json({ error: "Invalid player data" }, 400);
     }
 
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = [...players, player];
-    await kv.set("players", updatedPlayers);
+    // Filter out client-only fields that don't exist in DB
+    const { createdAt, ...dbPlayer } = player;
+
+    const addedPlayer = await db.addPlayer(dbPlayer);
     
-    return c.json({ player, success: true });
+    return c.json({ player: addedPlayer, success: true });
   } catch (error) {
     console.error("Error adding player:", error);
     return c.json({ error: "Failed to add player", details: String(error) }, 500);
@@ -262,9 +248,10 @@ app.post("/make-server-41b22d2d/players/batch", async (c) => {
       }
     }
 
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = [...players, ...newPlayers];
-    await kv.set("players", updatedPlayers);
+    // Filter out client-only fields that don't exist in DB
+    const dbPlayers = newPlayers.map(({ createdAt, ...dbPlayer }) => dbPlayer);
+
+    await db.batchAddPlayers(dbPlayers);
     
     console.log(`✅ Batch added ${newPlayers.length} players`);
     return c.json({ success: true, count: newPlayers.length });
@@ -283,13 +270,10 @@ app.post("/make-server-41b22d2d/players/batch-delete", async (c) => {
       return c.json({ error: "Invalid player IDs" }, 400);
     }
 
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = players.filter((p: any) => !playerIds.includes(p.id));
-    await kv.set("players", updatedPlayers);
+    await db.batchDeletePlayers(playerIds);
     
-    const deletedCount = players.length - updatedPlayers.length;
-    console.log(`✅ Batch deleted ${deletedCount} players`);
-    return c.json({ success: true, count: deletedCount });
+    console.log(`✅ Batch deleted ${playerIds.length} players`);
+    return c.json({ success: true, count: playerIds.length });
   } catch (error) {
     console.error("Error batch deleting players:", error);
     return c.json({ error: "Failed to batch delete players", details: String(error) }, 500);
@@ -306,11 +290,7 @@ app.put("/make-server-41b22d2d/players/:id", async (c) => {
       return c.json({ error: "Invalid request data" }, 400);
     }
 
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = players.map((p: any) =>
-      p.id === playerId ? { ...p, ...updates } : p
-    );
-    await kv.set("players", updatedPlayers);
+    await db.updatePlayer(playerId, updates);
     
     return c.json({ success: true });
   } catch (error) {
@@ -331,20 +311,7 @@ app.post("/make-server-41b22d2d/players/batch-update", async (c) => {
 
     console.log(`🔄 Batch updating ${playerUpdates.length} players...`);
     
-    const players = (await kv.get("players")) || [];
-    
-    // Create a map of player IDs to updates for faster lookup
-    const updateMap = new Map(
-      playerUpdates.map((update: any) => [update.playerId, update.updates])
-    );
-    
-    // Apply all updates
-    const updatedPlayers = players.map((p: any) => {
-      const updates = updateMap.get(p.id);
-      return updates ? { ...p, ...updates } : p;
-    });
-    
-    await kv.set("players", updatedPlayers);
+    await db.batchUpdatePlayers(playerUpdates);
     
     console.log(`✅ Successfully batch updated ${playerUpdates.length} players`);
     return c.json({ success: true, count: playerUpdates.length });
@@ -363,9 +330,7 @@ app.delete("/make-server-41b22d2d/players/:id", async (c) => {
       return c.json({ error: "Invalid player ID" }, 400);
     }
 
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = players.filter((p: any) => p.id !== playerId);
-    await kv.set("players", updatedPlayers);
+    await db.deletePlayer(playerId);
     
     return c.json({ success: true });
   } catch (error) {
@@ -377,17 +342,10 @@ app.delete("/make-server-41b22d2d/players/:id", async (c) => {
 // Reset game counts for all players (for 초기화 button)
 app.post("/make-server-41b22d2d/players/reset-game-counts", async (c) => {
   try {
-    const players = (await kv.get("players")) || [];
-    const updatedPlayers = players.map((p: any) => ({
-      ...p,
-      gameCount: 0,
-      lastGameEndAt: null,
-      teammateHistory: {},
-      recentTeammates: undefined,
-    }));
-    await kv.set("players", updatedPlayers);
+    await db.resetPlayerGameCounts();
     
-    return c.json({ success: true, count: updatedPlayers.length });
+    const players = await db.getAllPlayers();
+    return c.json({ success: true, count: players.length });
   } catch (error) {
     console.error("Error resetting game counts:", error);
     return c.json({ error: "Failed to reset game counts", details: String(error) }, 500);
@@ -399,8 +357,8 @@ app.post("/make-server-41b22d2d/players/reset-game-counts", async (c) => {
 // Get all teams
 app.get("/make-server-41b22d2d/teams", async (c) => {
   try {
-    const teams = await kv.get("teams");
-    return c.json(teams || []);
+    const teams = await db.getAllTeams();
+    return c.json(teams);
   } catch (error) {
     console.error("Error getting teams:", error);
     return c.json({ error: "Failed to get teams", details: String(error) }, 500);
@@ -412,15 +370,13 @@ app.post("/make-server-41b22d2d/teams", async (c) => {
   try {
     const team = await c.req.json();
     
-    if (!team || !team.id || !team.playerIds) {
+    if (!team || !team.id || !team.player_ids) {
       return c.json({ error: "Invalid team data" }, 400);
     }
 
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = [...teams, team];
-    await kv.set("teams", updatedTeams);
+    const addedTeam = await db.addTeam(team);
     
-    return c.json({ team, success: true });
+    return c.json({ team: addedTeam, success: true });
   } catch (error) {
     console.error("Error adding team:", error);
     return c.json({ error: "Failed to add team", details: String(error) }, 500);
@@ -437,9 +393,10 @@ app.post("/make-server-41b22d2d/teams/batch", async (c) => {
       return c.json({ error: "Invalid teams data" }, 400);
     }
 
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = [...teams, ...newTeams];
-    await kv.set("teams", updatedTeams);
+    // Filter out client-only fields that don't exist in DB
+    const dbTeams = newTeams.map(({ assignedCourtId, createdAt, ...dbTeam }) => dbTeam);
+
+    await db.batchAddTeams(dbTeams);
     
     return c.json({ success: true, count: newTeams.length });
   } catch (error) {
@@ -458,11 +415,7 @@ app.put("/make-server-41b22d2d/teams/:id", async (c) => {
       return c.json({ error: "Invalid request data" }, 400);
     }
 
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = teams.map((t: any) =>
-      t.id === teamId ? { ...t, ...updates } : t
-    );
-    await kv.set("teams", updatedTeams);
+    await db.updateTeam(teamId, updates);
     
     return c.json({ success: true });
   } catch (error) {
@@ -474,11 +427,9 @@ app.put("/make-server-41b22d2d/teams/:id", async (c) => {
 // Delete all finished teams (MUST be before /:id route)
 app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
   try {
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = teams.filter((t: any) => t.state !== 'finished');
-    await kv.set("teams", updatedTeams);
+    await db.deleteFinishedTeams();
     
-    console.log(`✅ Deleted ${teams.length - updatedTeams.length} finished teams from Supabase`);
+    console.log(`✅ Deleted finished teams from Supabase`);
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting finished teams:", error);
@@ -489,7 +440,7 @@ app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
 // Delete all teams (for session reset)
 app.delete("/make-server-41b22d2d/teams/all", async (c) => {
   try {
-    await kv.set("teams", []);
+    await db.deleteAllTeams();
     console.log("✅ Deleted all teams from Supabase");
     return c.json({ success: true });
   } catch (error) {
@@ -507,9 +458,7 @@ app.delete("/make-server-41b22d2d/teams/:id", async (c) => {
       return c.json({ error: "Invalid team ID" }, 400);
     }
 
-    const teams = (await kv.get("teams")) || [];
-    const updatedTeams = teams.filter((t: any) => t.id !== teamId);
-    await kv.set("teams", updatedTeams);
+    await db.deleteTeam(teamId);
     
     return c.json({ success: true });
   } catch (error) {
@@ -523,14 +472,14 @@ app.delete("/make-server-41b22d2d/teams/:id", async (c) => {
 // Initialize admin password (only if not set)
 app.post("/make-server-41b22d2d/admin-password/init", async (c) => {
   try {
-    const existingPassword = await kv.get("admin_password");
+    const existingPassword = await db.getSetting("admin_password");
     
     if (existingPassword) {
       return c.json({ message: "Password already initialized" });
     }
     
     // Set default password to "1234"
-    await kv.set("admin_password", "1234");
+    await db.setSetting("admin_password", "1234");
     
     return c.json({ success: true, message: "Password initialized to 1234" });
   } catch (error) {
@@ -549,11 +498,11 @@ app.post("/make-server-41b22d2d/admin-password/verify", async (c) => {
       return c.json({ error: "Password is required" }, 400);
     }
     
-    let storedPassword = await kv.get("admin_password");
+    let storedPassword = await db.getSetting("admin_password");
     
     // If no password set, initialize with default "1234"
     if (!storedPassword) {
-      await kv.set("admin_password", "1234");
+      await db.setSetting("admin_password", "1234");
       storedPassword = "1234";
     }
     
@@ -580,11 +529,11 @@ app.post("/make-server-41b22d2d/admin-password/change", async (c) => {
       return c.json({ error: "New password must be at least 4 characters" }, 400);
     }
     
-    let storedPassword = await kv.get("admin_password");
+    let storedPassword = await db.getSetting("admin_password");
     
     // If no password set, initialize with default "1234"
     if (!storedPassword) {
-      await kv.set("admin_password", "1234");
+      await db.setSetting("admin_password", "1234");
       storedPassword = "1234";
     }
     
@@ -594,12 +543,145 @@ app.post("/make-server-41b22d2d/admin-password/change", async (c) => {
     }
     
     // Update to new password
-    await kv.set("admin_password", newPassword);
+    await db.setSetting("admin_password", newPassword);
     
     return c.json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     console.error("Error changing admin password:", error);
     return c.json({ error: "Failed to change password", details: String(error) }, 500);
+  }
+});
+
+// ============= DATA MIGRATION ENDPOINT =============
+
+// Check what's in KV store
+app.get("/make-server-41b22d2d/check-kv", async (c) => {
+  try {
+    console.log("🔍 Checking KV store contents...");
+    
+    const kvMembers = await kv.get("members");
+    const kvPlayers = await kv.get("players");
+    const kvTeams = await kv.get("teams");
+    const kvAdminPassword = await kv.get("admin_password");
+    
+    console.log("KV Store contents:", {
+      members: kvMembers ? `Found ${Array.isArray(kvMembers) ? kvMembers.length : 'non-array'} members` : 'null',
+      players: kvPlayers ? `Found ${Array.isArray(kvPlayers) ? kvPlayers.length : 'non-array'} players` : 'null',
+      teams: kvTeams ? `Found ${Array.isArray(kvTeams) ? kvTeams.length : 'non-array'} teams` : 'null',
+      admin_password: kvAdminPassword ? 'Found' : 'null',
+    });
+    
+    return c.json({
+      success: true,
+      kvStore: {
+        members: kvMembers,
+        players: kvPlayers,
+        teams: kvTeams,
+        admin_password: kvAdminPassword ? '***' : null,
+      },
+      counts: {
+        members: Array.isArray(kvMembers) ? kvMembers.length : 0,
+        players: Array.isArray(kvPlayers) ? kvPlayers.length : 0,
+        teams: Array.isArray(kvTeams) ? kvTeams.length : 0,
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error checking KV store:", error);
+    return c.json({ error: "Failed to check KV store", details: String(error) }, 500);
+  }
+});
+
+// Migrate data from KV store to new table structure
+app.post("/make-server-41b22d2d/migrate-from-kv", async (c) => {
+  try {
+    console.log("🚀 Starting migration from KV store to new tables...");
+    
+    // Get data from KV store
+    const kvMembers = (await kv.get("members")) || [];
+    const kvPlayers = (await kv.get("players")) || [];
+    const kvTeams = (await kv.get("teams")) || [];
+    const kvAdminPassword = await kv.get("admin_password");
+    
+    console.log(`📊 Found in KV store: ${kvMembers.length} members, ${kvPlayers.length} players, ${kvTeams.length} teams`);
+    
+    let migratedCounts = {
+      members: 0,
+      players: 0,
+      teams: 0,
+      settings: 0,
+    };
+    
+    // Helper function to convert camelCase to snake_case
+    const toSnakeCase = (obj: any) => {
+      const converted: any = {};
+      for (const key in obj) {
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        converted[snakeKey] = obj[key];
+      }
+      return converted;
+    };
+    
+    // Migrate members
+    if (kvMembers.length > 0) {
+      console.log(`🔄 Migrating ${kvMembers.length} members...`);
+      await db.deleteAllMembers(); // Clear existing
+      
+      // Convert camelCase to snake_case
+      const convertedMembers = kvMembers.map((member: any) => toSnakeCase(member));
+      
+      await db.batchAddMembers(convertedMembers);
+      migratedCounts.members = kvMembers.length;
+      console.log(`✅ Migrated ${kvMembers.length} members`);
+    }
+    
+    // Migrate players
+    if (kvPlayers.length > 0) {
+      console.log(`🔄 Migrating ${kvPlayers.length} players...`);
+      // Clear existing players
+      const existingPlayers = await db.getAllPlayers();
+      if (existingPlayers.length > 0) {
+        await db.batchDeletePlayers(existingPlayers.map((p: any) => p.id));
+      }
+      
+      // Convert camelCase to snake_case
+      const convertedPlayers = kvPlayers.map((player: any) => toSnakeCase(player));
+      
+      await db.batchAddPlayers(convertedPlayers);
+      migratedCounts.players = kvPlayers.length;
+      console.log(`✅ Migrated ${kvPlayers.length} players`);
+    }
+    
+    // Migrate teams
+    if (kvTeams.length > 0) {
+      console.log(`🔄 Migrating ${kvTeams.length} teams...`);
+      await db.deleteAllTeams(); // Clear existing
+      
+      // Convert camelCase to snake_case
+      const convertedTeams = kvTeams.map((team: any) => toSnakeCase(team));
+      
+      await db.batchAddTeams(convertedTeams);
+      migratedCounts.teams = kvTeams.length;
+      console.log(`✅ Migrated ${kvTeams.length} teams`);
+    }
+    
+    // Migrate admin password
+    if (kvAdminPassword) {
+      console.log(`🔄 Migrating admin password...`);
+      await db.setSetting("admin_password", kvAdminPassword);
+      migratedCounts.settings = 1;
+      console.log(`✅ Migrated admin password`);
+    }
+    
+    console.log("🎉 Migration completed successfully!");
+    
+    return c.json({
+      success: true,
+      message: "Data migrated from KV store to new tables",
+      migrated: migratedCounts,
+    });
+  } catch (error) {
+    console.error("❌ Error during migration:", error);
+    return c.json({ error: "Failed to migrate data", details: String(error) }, 500);
   }
 });
 

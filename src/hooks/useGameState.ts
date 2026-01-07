@@ -6,11 +6,22 @@ import { membersApi } from '../utils/api/membersApi';
 import { playersApi } from '../utils/api/playersApi';
 import { teamsApi } from '../utils/api/teamsApi';
 
+// Convert index to letter (0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, etc.)
+function indexToLetter(index: number): string {
+  let result = '';
+  let num = index;
+  while (num >= 0) {
+    result = String.fromCharCode(65 + (num % 26)) + result;
+    num = Math.floor(num / 26) - 1;
+  }
+  return result;
+}
+
 function createInitialCourts(count: number): Court[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `court-${i}`,
     index: i + 1,
-    name: `코트 ${i + 1}`,
+    name: indexToLetter(i),
     status: 'available' as const,
     timerMs: 0,
     currentTeamId: null,
@@ -165,41 +176,26 @@ export function useGameState() {
       // Adjust courts if count changed
       let newCourts = prev.courts;
       if (updates.courtsCount !== undefined && updates.courtsCount !== prev.session.courtsCount) {
+        const maxCourts = 20; // Maximum number of courts to maintain
+        
         if (updates.courtsCount > prev.courts.length) {
-          // Add courts with unique IDs
-          const toAdd = updates.courtsCount - prev.courts.length;
-          const additionalCourts = Array.from({ length: toAdd }, (_, i) => ({
-            id: `court-${Date.now()}-${i}`,
-            index: prev.courts.length + i + 1,
-            name: `코트 ${prev.courts.length + i + 1}`,
-            status: 'available' as const,
-            timerMs: 0,
-            currentTeamId: null,
-            isPaused: false,
-          }));
-          newCourts = [...prev.courts, ...additionalCourts];
-        } else {
-          // Remove courts - prioritize keeping occupied courts
-          const occupiedCourts = prev.courts.filter(c => c.status === 'occupied');
-          const availableCourts = prev.courts.filter(c => c.status === 'available');
-          
-          // If we have more occupied courts than the new count, keep all occupied courts anyway
-          // (we can't remove courts that are in use)
-          if (occupiedCourts.length >= updates.courtsCount) {
-            newCourts = occupiedCourts;
-          } else {
-            // Keep all occupied courts and fill remaining slots with available courts
-            const remainingSlots = updates.courtsCount - occupiedCourts.length;
-            newCourts = [...occupiedCourts, ...availableCourts.slice(0, remainingSlots)];
+          // Add courts up to the new count (but not more than max)
+          const toAdd = Math.min(updates.courtsCount, maxCourts) - prev.courts.length;
+          if (toAdd > 0) {
+            const additionalCourts = Array.from({ length: toAdd }, (_, i) => ({
+              id: `court-${Date.now()}-${i}`,
+              index: prev.courts.length + i + 1,
+              name: indexToLetter(prev.courts.length + i),
+              status: 'available' as const,
+              timerMs: 0,
+              currentTeamId: null,
+              isPaused: false,
+            }));
+            newCourts = [...prev.courts, ...additionalCourts];
           }
-          
-          // Re-index courts to maintain proper numbering
-          newCourts = newCourts.map((court, idx) => ({
-            ...court,
-            index: idx + 1,
-            name: `코트 ${idx + 1}`,
-          }));
         }
+        // When reducing count, keep all courts in memory (don't remove them)
+        // They will be filtered out when displaying based on courtsCount
       }
       
       return {
@@ -501,12 +497,20 @@ export function useGameState() {
       
       // Update team state in Supabase
       const targetCourt = courtId || state.courts.find((c) => c.status === 'available')?.id;
-      await teamsApi.update(teamId, {
-        state: 'playing',
-        assignedCourtId: targetCourt,
-        startedAt: new Date(),
-      });
-      console.log(`✅ Updated team ${teamId} to playing in Supabase`);
+      if (targetCourt) {
+        await teamsApi.update(teamId, {
+          state: 'playing',
+          assignedCourtId: targetCourt,
+          startedAt: new Date(),
+        });
+        console.log(`✅ Updated team ${teamId} to playing with courtId ${targetCourt} in Supabase`);
+      } else {
+        await teamsApi.update(teamId, {
+          state: 'playing',
+          startedAt: new Date(),
+        });
+        console.log(`✅ Updated team ${teamId} to playing (no court assigned) in Supabase`);
+      }
       
       // Update player states to 'playing' in Supabase
       if (playersToUpdate.length > 0) {
@@ -756,6 +760,17 @@ export function useGameState() {
       ),
     }));
   }, []);
+
+  const updateCourtNames = useCallback((courtUpdates: { id: string; name: string }[]) => {
+    setState((prev) => ({
+      ...prev,
+      courts: prev.courts.map((court) => {
+        const update = courtUpdates.find(u => u.id === court.id);
+        return update ? { ...court, name: update.name } : court;
+      }),
+    }));
+    addAuditLog('courts_renamed', { courtUpdates });
+  }, [addAuditLog]);
 
   const adjustGameCount = useCallback(async (playerId: string, delta: number) => {
     let newGameCount = 0;
@@ -1044,7 +1059,12 @@ export function useGameState() {
         };
         
         // Save to Supabase FIRST
-        console.log(`📤 Adding player to Supabase:`, player.name);
+        console.log(`📤 Adding player to Supabase with rank:`, { 
+          name: player.name, 
+          gender: player.gender, 
+          rank: player.rank,
+          memberRank: member.rank 
+        });
         await playersApi.add(player);
         console.log(`✅ Added player to Supabase:`, player.name);
         
@@ -1128,21 +1148,21 @@ export function useGameState() {
       
       // Load members
       const membersFromDb = await membersApi.getAll();
-      console.log(`📦 Loaded ${membersFromDb.length} members from Supabase`);
+      console.log(`📦 Loaded ${membersFromDb.length} members from Supabase:`, membersFromDb.map(m => ({ id: m.id, name: m.name, gender: m.gender, rank: m.rank })));
       
       // Load players
       const playersFromDb = await playersApi.getAll();
-      console.log(`👥 Loaded ${playersFromDb.length} players from Supabase:`, playersFromDb.map(p => ({ id: p.id, name: p.name, state: p.state })));
+      console.log(`👥 Loaded ${playersFromDb.length} players from Supabase:`, playersFromDb.map(p => ({ id: p.id, name: p.name, state: p.state, gender: p.gender, rank: p.rank })));
       
       // Load teams
       const teamsFromDb = await teamsApi.getAll();
-      console.log(`🏐 RAW teams from Supabase:`, teamsFromDb.map(t => ({ id: t.id, name: t.name, state: t.state, playerIds: t.playerIds })));
+      console.log(`🏐 RAW teams from Supabase:`, teamsFromDb.map(t => ({ id: t.id, name: t.name, state: t.state, assignedCourtId: t.assignedCourtId, playerIds: t.playerIds })));
       
       const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
       const finishedTeams = teamsFromDb.filter(t => t.state === 'finished');
       
       console.log(`🏐 Loaded ${activeTeams.length} active teams from Supabase (total: ${teamsFromDb.length}):`, 
-        activeTeams.map(t => ({ id: t.id, name: t.name, state: t.state, playerCount: t.playerIds.length })));
+        activeTeams.map(t => ({ id: t.id, name: t.name, state: t.state, assignedCourtId: t.assignedCourtId, playerCount: t.playerIds.length })));
       
       // Clean up finished teams if there are any
       if (finishedTeams.length > 0) {
@@ -1274,6 +1294,7 @@ export function useGameState() {
     endGame,
     toggleCourtPause,
     updateCourtTimer,
+    updateCourtNames,
     adjustGameCount,
     deleteTeam,
     updateTeam,
