@@ -23,6 +23,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       position={isMobile ? "top-center" : "bottom-right"}
+      duration={1500}
       style={
         {
           "--normal-bg": "var(--popover)",
