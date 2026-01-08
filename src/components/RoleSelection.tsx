@@ -7,9 +7,10 @@ import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 interface RoleSelectionProps {
   onSelectRole: (role: 'admin' | 'member') => void;
+  onLoginSuccess?: () => void;
 }
 
-export function RoleSelection({ onSelectRole }: RoleSelectionProps) {
+export function RoleSelection({ onSelectRole, onLoginSuccess }: RoleSelectionProps) {
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -55,6 +56,9 @@ export function RoleSelection({ onSelectRole }: RoleSelectionProps) {
 
       if (data.valid) {
         onSelectRole('admin');
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        }
       } else {
         setError('비밀번호가 올바르지 않습니다');
         setPassword('');
@@ -64,6 +68,13 @@ export function RoleSelection({ onSelectRole }: RoleSelectionProps) {
       setError('비밀번호 확인 중 오류가 발생했습니다');
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleMemberClick = () => {
+    onSelectRole('member');
+    if (onLoginSuccess) {
+      onLoginSuccess();
     }
   };
 
@@ -189,7 +200,7 @@ export function RoleSelection({ onSelectRole }: RoleSelectionProps) {
 
           {/* Member Card */}
           <button
-            onClick={() => onSelectRole('member')}
+            onClick={handleMemberClick}
             className="group relative bg-white rounded-2xl border-2 border-gray-200 p-6 md:p-8 hover:border-emerald-500 hover:shadow-2xl transition-all duration-300 active:scale-95 text-left"
           >
             <div className="absolute top-4 right-4 size-10 md:size-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">

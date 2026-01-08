@@ -549,7 +549,20 @@ export default function App() {
 
   // Show role selection screen if no role is selected
   if (!userRole) {
-    return <RoleSelection onSelectRole={setUserRole} />;
+    return (
+      <RoleSelection 
+        onSelectRole={setUserRole} 
+        onLoginSuccess={async () => {
+          console.log('🔐 Login successful, syncing from Supabase...');
+          try {
+            await syncFromSupabase();
+            console.log('✅ Sync completed after login');
+          } catch (error) {
+            console.error('⚠️ Sync failed after login:', error);
+          }
+        }} 
+      />
+    );
   }
 
   const isAdmin = userRole === 'admin';
