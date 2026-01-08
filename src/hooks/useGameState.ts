@@ -665,52 +665,52 @@ export function useGameState() {
   const endGame = useCallback(async (courtId: string) => {
     console.log('🎮 endGame called for courtId:', courtId);
     
-    // Get current state to find team and players
-    const court = state.courts.find((c) => c.id === courtId);
-    if (!court || !court.currentTeamId) {
-      console.log('❌ Court not found or no team:', { court, courtId });
-      return;
-    }
-    
-    const team = state.teams.find((t) => t.id === court.currentTeamId);
-    if (!team) {
-      console.log('❌ Team not found:', court.currentTeamId);
-      return;
-    }
-    
-    console.log(`✅ Found team ${team.id} with ${team.playerIds.length} players`);
-    
-    const teamToDelete = team.id;
-    const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
-    const now = new Date();
-    
-    // Prepare player updates
-    team.playerIds.forEach(playerId => {
-      const player = state.players.find(p => p.id === playerId);
-      if (player) {
-        const teammates = team.playerIds.filter(id => id !== playerId);
-        const teammateHistory = { ...(player.teammateHistory || {}) };
-        
-        for (const teammateId of teammates) {
-          teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
-        }
-        
-        playersToUpdate.push({
-          id: playerId,
-          updates: {
-            state: 'waiting',
-            gameCount: player.gameCount + 1,
-            lastGameEndAt: now,
-            teammateHistory,
-          },
-        });
-      }
-    });
-    
-    console.log(`🔄 Prepared to update ${playersToUpdate.length} players, delete team ${teamToDelete}`);
-    
     try {
-      // Update local state first
+      // Get current state snapshot
+      const court = state.courts.find((c) => c.id === courtId);
+      if (!court || !court.currentTeamId) {
+        console.log('❌ Court not found or no team:', { court, courtId });
+        return;
+      }
+      
+      const team = state.teams.find((t) => t.id === court.currentTeamId);
+      if (!team) {
+        console.log('❌ Team not found:', court.currentTeamId);
+        return;
+      }
+      
+      console.log(`✅ Found team ${team.id} with ${team.playerIds.length} players`);
+      
+      const teamToDelete = team.id;
+      const playersToUpdate: { id: string, updates: Partial<Player> }[] = [];
+      const now = new Date();
+      
+      // Prepare player updates BEFORE setState
+      team.playerIds.forEach(playerId => {
+        const player = state.players.find(p => p.id === playerId);
+        if (player) {
+          const teammates = team.playerIds.filter(id => id !== playerId);
+          const teammateHistory = { ...(player.teammateHistory || {}) };
+          
+          for (const teammateId of teammates) {
+            teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
+          }
+          
+          playersToUpdate.push({
+            id: playerId,
+            updates: {
+              state: 'waiting',
+              gameCount: player.gameCount + 1,
+              lastGameEndAt: now,
+              teammateHistory,
+            },
+          });
+        }
+      });
+      
+      console.log(`🔄 Prepared to update ${playersToUpdate.length} players, delete team ${teamToDelete}`);
+      
+      // Update local state using prepared updates
       setState((prev) => {
         const updatedPlayers = prev.players.map((p) => {
           const update = playersToUpdate.find(u => u.id === p.id);
@@ -718,11 +718,8 @@ export function useGameState() {
             const teammates = team.playerIds.filter(id => id !== p.id);
             return {
               ...p,
-              state: 'waiting' as const,
-              gameCount: p.gameCount + 1,
-              lastGameEndAt: now,
+              ...update.updates,
               recentTeammates: teammates,
-              teammateHistory: update.updates.teammateHistory,
             };
           }
           return p;
@@ -831,10 +828,8 @@ export function useGameState() {
           if (update) {
             return {
               ...p,
-              state: 'waiting' as const,
-              gameCount: p.gameCount + 1,
-              lastGameEndAt: now,
-              teammateHistory: update.updates.teammateHistory,
+              ...update.updates,
+              recentTeammates: team.playerIds.filter(id => id !== p.id),
             };
           }
           return p;

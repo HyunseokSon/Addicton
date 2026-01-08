@@ -104,8 +104,9 @@ export function autoMatch(
   const optimizedTeams = optimizeTeammates(balancedTeams);
 
   // Create team objects
+  const timestamp = Date.now();
   const teams: Team[] = optimizedTeams.map((teamPlayers, idx) => ({
-    id: `team-${Date.now()}-${Math.random()}-${idx}`,
+    id: `team-${timestamp}-${Math.random().toString(36).substr(2, 9)}-${idx}`,
     name: `팀 ${idx + 1}`,
     playerIds: teamPlayers.map((p) => p.id),
     state: 'queued',

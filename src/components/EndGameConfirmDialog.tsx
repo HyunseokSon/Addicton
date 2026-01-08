@@ -65,7 +65,7 @@ export function EndGameConfirmDialog({
                   <div className="flex items-center gap-1.5">
                     {player.gender && (
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">
-                        {player.gender === 'male' ? '남' : '여'}
+                        {player.gender}
                       </Badge>
                     )}
                     {player.rank && (

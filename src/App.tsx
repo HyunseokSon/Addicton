@@ -124,14 +124,17 @@ export default function App() {
     try {
       await performAutoMatch();
       
-      // Close modal and show success toast immediately
+      // Wait for Supabase update to complete before syncing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Sync from Supabase to get the latest data
+      await syncFromSupabase();
+      
+      // Close modal and show success toast
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('팀 매칭 완료', {
         description: `${newTeamsCount}개 팀이 생성되었습니다.`,
       });
-
-      // Background sync without waiting
-      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Auto match failed:', error);
@@ -183,14 +186,17 @@ export default function App() {
     try {
       await startAllQueuedGames();
       
-      // Close modal and show success toast immediately
+      // Wait for Supabase update to complete before syncing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Sync from Supabase to get the latest data
+      await syncFromSupabase();
+      
+      // Close modal and show success toast
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('게임 시작 완료', {
         description: `${teamsToStart}개 팀의 게임이 시작되었습니다.`,
       });
-
-      // Background sync without waiting
-      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Start all games failed:', error);
@@ -221,14 +227,17 @@ export default function App() {
     try {
       await endGame(courtId);
       
-      // Close modal and show success toast immediately
+      // Wait for Supabase update to complete before syncing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Sync from Supabase to get the latest data
+      await syncFromSupabase();
+      
+      // Close modal and show success toast
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('게임 종료 완료', {
         description: '참가자들이 대기 상태로 전환되었습니다.',
       });
-
-      // Background sync without waiting
-      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('End game failed:', error);
@@ -262,14 +271,17 @@ export default function App() {
     try {
       const endedCount = await endAllGames();
       
-      // Close modal and show success toast immediately
+      // Wait for Supabase update to complete before syncing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Sync from Supabase to get the latest data
+      await syncFromSupabase();
+      
+      // Close modal and show success toast
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('모든 게임 종료 완료', {
         description: `${endedCount}개의 게임이 종료되었습니다.`,
       });
-
-      // Background sync without waiting
-      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('End all games failed:', error);
@@ -317,16 +329,19 @@ export default function App() {
       await updatePlayer(waitingPlayerId, { state: 'queued' });
       console.log(`📤 Updating ${queuedPlayer.name} to waiting state...`);
       await updatePlayer(queuedPlayerId, { state: 'waiting' });
-      console.log('✅ Player states updated in Supabase');
+      console.log('✅ Player states updated in Supabase')
 
-      // Close modal and show success toast immediately
+      // Wait for Supabase update to complete before syncing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Sync from Supabase to get the latest data
+      await syncFromSupabase();
+      
+      // Close modal and show success toast
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('참가자 교체 완료', {
         description: `${waitingPlayer.name}님과 ${queuedPlayer.name}님이 교체되었습니다.`,
       });
-
-      // Background sync without waiting
-      syncFromSupabase().catch(err => console.error('Background sync failed:', err));
 
     } catch (error) {
       console.error('Swap player failed:', error);
@@ -358,7 +373,7 @@ export default function App() {
     updateTeam(dropTeamId, newDropPlayerIds);
   };
 
-  const handleReturnToWaiting = (playerId: string, teamId: string) => {
+  const handleReturnToWaiting = async (playerId: string, teamId: string) => {
     const team = state.teams.find((t) => t.id === teamId);
     if (!team) return;
 
@@ -367,13 +382,13 @@ export default function App() {
     
     if (newPlayerIds.length === 0) {
       // If team is now empty, delete the team
-      deleteTeam(teamId);
+      await deleteTeam(teamId);
     } else {
-      updateTeam(teamId, newPlayerIds);
+      await updateTeam(teamId, newPlayerIds);
     }
 
     // Update player state to waiting
-    updatePlayer(playerId, { state: 'waiting' });
+    await updatePlayer(playerId, { state: 'waiting' });
 
     toast.success('대기 상태로 복귀', {
       description: '참가자가 대기 상태로 변경되었습니다.',
