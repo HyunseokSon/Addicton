@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Court } from '../types';
 import {
   Dialog,
@@ -40,6 +40,29 @@ export function CourtSettingsDialog({
   });
   const [courtCount, setCourtCount] = useState(currentCourtCount.toString());
   const [error, setError] = useState('');
+
+  // Reset state when dialog opens with fresh data from props
+  useEffect(() => {
+    if (open) {
+      // Reset court names from latest props
+      const names: Record<string, string> = {};
+      courts.forEach(court => {
+        names[court.id] = court.name;
+      });
+      setCourtNames(names);
+      
+      // Reset court count from latest props
+      setCourtCount(currentCourtCount.toString());
+      
+      // Clear any errors
+      setError('');
+      
+      console.log('🔄 Court settings dialog opened with fresh data:', {
+        courtCount: currentCourtCount,
+        courtNames: names,
+      });
+    }
+  }, [open, courts, currentCourtCount]);
 
   // Generate virtual courts for preview when user increases count
   const getDisplayCourts = () => {
