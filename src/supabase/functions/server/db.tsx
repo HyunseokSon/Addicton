@@ -279,6 +279,18 @@ export async function deleteTeam(id: string) {
   }
 }
 
+export async function batchDeleteTeams(teamIds: string[]) {
+  const { error } = await supabase
+    .from("teams")
+    .delete()
+    .in("id", teamIds);
+
+  if (error) {
+    console.error("Database error batch deleting teams:", error);
+    throw new Error(`Failed to batch delete teams: ${error.message}`);
+  }
+}
+
 export async function deleteFinishedTeams() {
   const { error } = await supabase
     .from("teams")

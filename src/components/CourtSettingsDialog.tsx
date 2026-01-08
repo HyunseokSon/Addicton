@@ -41,6 +41,28 @@ export function CourtSettingsDialog({
   const [courtCount, setCourtCount] = useState(currentCourtCount.toString());
   const [error, setError] = useState('');
 
+  // Generate virtual courts for preview when user increases count
+  const getDisplayCourts = () => {
+    const targetCount = parseInt(courtCount, 10) || currentCourtCount;
+    const displayCourts = [...courts];
+    
+    // If user wants more courts than currently exist, create virtual ones
+    while (displayCourts.length < targetCount) {
+      const index = displayCourts.length;
+      displayCourts.push({
+        id: `court-${index}`,
+        index: index + 1,
+        name: String.fromCharCode(65 + index), // A, B, C, ...
+        status: 'available' as const,
+        timerMs: 0,
+        currentTeamId: null,
+        isPaused: false,
+      });
+    }
+    
+    return displayCourts.slice(0, targetCount);
+  };
+
   const handleSave = () => {
     // Validate court count
     const newCount = parseInt(courtCount, 10);
@@ -61,7 +83,7 @@ export function CourtSettingsDialog({
     }
 
     // Update court names
-    const updates = courts.slice(0, newCount).map(court => ({
+    const updates = getDisplayCourts().map(court => ({
       id: court.id,
       name: courtNames[court.id] || court.name,
     }));
@@ -86,6 +108,18 @@ export function CourtSettingsDialog({
   const handleCourtCountChange = (value: string) => {
     setCourtCount(value);
     setError(''); // Clear error when user types
+    
+    // Dynamically adjust court names when count changes
+    const newCount = parseInt(value, 10);
+    if (!isNaN(newCount) && newCount > 0) {
+      // Ensure we have court names for the new count
+      setCourtNames(prev => {
+        const updated = { ...prev };
+        // If increasing count, we don't need to do anything special
+        // The courts array already has the IDs, we just need to show more inputs
+        return updated;
+      });
+    }
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -154,7 +188,7 @@ export function CourtSettingsDialog({
           <div className="space-y-3">
             <Label className="text-sm font-semibold">코트 번호 설정</Label>
             <div className="space-y-3">
-              {courts.slice(0, parseInt(courtCount) || currentCourtCount).map((court, index) => (
+              {getDisplayCourts().map((court, index) => (
                 <div key={court.id} className="space-y-1.5">
                   <Label htmlFor={`court-${court.id}`} className="text-xs text-gray-600">
                     코트 {index + 1}

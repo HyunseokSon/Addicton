@@ -128,6 +128,24 @@ export const teamsApi = {
     }
   },
 
+  async deleteBatch(teamIds: string[]): Promise<number> {
+    const response = await fetch(`${API_BASE}/teams/batch-delete`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ teamIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to batch delete teams: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.count || 0;
+  },
+
   async deleteFinished(): Promise<void> {
     const response = await fetch(`${API_BASE}/teams/finished`, {
       method: 'DELETE',

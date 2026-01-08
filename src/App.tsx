@@ -306,9 +306,6 @@ export default function App() {
       console.log(`📤 Updating ${queuedPlayer.name} to waiting state...`);
       await updatePlayer(queuedPlayerId, { state: 'waiting' });
       console.log('✅ Player states updated in Supabase')
-
-      // Wait for Supabase update to complete before syncing
-      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Sync from Supabase to get the latest data
       await syncFromSupabase();

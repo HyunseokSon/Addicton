@@ -68,6 +68,11 @@ export function useGameState() {
         const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
         console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
         
+        // Load court names from settings
+        const courtNamesStr = await settingsApi.get('court_names');
+        const courtNamesMap: Record<string, string> = courtNamesStr ? JSON.parse(courtNamesStr) : {};
+        console.log(`📊 Loaded court names:`, courtNamesMap);
+        
         // Load members
         const membersFromDb = await membersApi.getAll();
         
@@ -84,16 +89,25 @@ export function useGameState() {
           let updatedCourts = prev.courts;
           
           if (courtsToCreate > prev.courts.length) {
-            const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => ({
-              id: `court-${prev.courts.length + i}`,
-              index: prev.courts.length + i + 1,
-              name: indexToLetter(prev.courts.length + i),
-              status: 'available' as const,
-              timerMs: 0,
-              currentTeamId: null,
-              isPaused: false,
-            }));
+            const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => {
+              const courtId = `court-${prev.courts.length + i}`;
+              return {
+                id: courtId,
+                index: prev.courts.length + i + 1,
+                name: courtNamesMap[courtId] || indexToLetter(prev.courts.length + i),
+                status: 'available' as const,
+                timerMs: 0,
+                currentTeamId: null,
+                isPaused: false,
+              };
+            });
             updatedCourts = [...prev.courts, ...additionalCourts];
+          } else {
+            // Apply saved court names to existing courts
+            updatedCourts = prev.courts.map(court => ({
+              ...court,
+              name: courtNamesMap[court.id] || court.name,
+            }));
           }
           
           // Restore courts based on playing teams
@@ -113,12 +127,12 @@ export function useGameState() {
             }
             
             return {
-              ...court,
-              status: 'available' as const,
-              currentTeamId: null,
-              timerMs: 0,
-              isPaused: false,
-            };
+                ...court,
+                status: 'available' as const,
+                currentTeamId: null,
+                timerMs: 0,
+                isPaused: false,
+              };
           });
           
           // Update player states based on teams
@@ -544,14 +558,15 @@ export function useGameState() {
         console.log(`✅ Updated team ${teamId} to playing (no court assigned) in Supabase`);
       }
       
-      // Update player states to 'playing' in Supabase
+      // Batch update player states to 'playing' in Supabase
       if (playersToUpdate.length > 0) {
-        await Promise.all(
-          playersToUpdate.map((playerId) => 
-            playersApi.update(playerId, { state: 'playing' })
-          )
-        );
-        console.log(`✅ Updated ${playersToUpdate.length} players to playing state in Supabase`);
+        console.log(`📤 Batch updating ${playersToUpdate.length} players to playing state...`);
+        const playerUpdates = playersToUpdate.map((playerId) => ({
+          playerId,
+          updates: { state: 'playing' as const }
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Batch updated ${playersToUpdate.length} players to playing state in Supabase`);
       }
       
       addAuditLog('game_started', { teamId, courtId });
@@ -861,17 +876,23 @@ export function useGameState() {
       // Update Supabase - batch all updates
       console.log('📤 Updating Supabase with batch changes...');
       
-      // Update players in parallel
-      await Promise.all(
-        allPlayersToUpdate.map(({ id, updates }) =>
-          playersApi.update(id, updates)
-        )
-      );
+      // Batch update players in Supabase
+      if (allPlayersToUpdate.length > 0) {
+        console.log(`📤 Batch updating ${allPlayersToUpdate.length} players in Supabase...`);
+        const playerUpdates = allPlayersToUpdate.map(({ id, updates }) => ({
+          playerId: id,
+          updates,
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Batch updated ${allPlayersToUpdate.length} players in Supabase`);
+      }
       
-      // Delete teams in parallel
-      await Promise.all(
-        allTeamsToDelete.map(teamId => teamsApi.delete(teamId))
-      );
+      // Batch delete teams in Supabase
+      if (allTeamsToDelete.length > 0) {
+        console.log(`📤 Batch deleting ${allTeamsToDelete.length} teams in Supabase...`);
+        await teamsApi.deleteBatch(allTeamsToDelete);
+        console.log(`✅ Batch deleted ${allTeamsToDelete.length} teams in Supabase`);
+      }
       
       console.log('✅ All games ended successfully in Supabase');
       addAuditLog('batch_games_ended', { 
@@ -915,6 +936,19 @@ export function useGameState() {
         return update ? { ...court, name: update.name } : court;
       }),
     }));
+    
+    // Save court names to Supabase settings as JSON
+    const courtNamesMap: Record<string, string> = {};
+    courtUpdates.forEach(({ id, name }) => {
+      courtNamesMap[id] = name;
+    });
+    
+    settingsApi.set('court_names', JSON.stringify(courtNamesMap)).then(() => {
+      console.log(`✅ Saved court names to Supabase settings:`, courtNamesMap);
+    }).catch((error) => {
+      console.error('Failed to save court names to Supabase:', error);
+    });
+    
     addAuditLog('courts_renamed', { courtUpdates });
   }, [addAuditLog]);
 
@@ -1297,6 +1331,11 @@ export function useGameState() {
       const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
       console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
       
+      // Load court names from settings
+      const courtNamesStr = await settingsApi.get('court_names');
+      const courtNamesMap: Record<string, string> = courtNamesStr ? JSON.parse(courtNamesStr) : {};
+      console.log(`📊 Loaded court names:`, courtNamesMap);
+      
       // Load members
       const membersFromDb = await membersApi.getAll();
       console.log(`📦 Loaded ${membersFromDb.length} members from Supabase:`, membersFromDb.map(m => ({ id: m.id, name: m.name, gender: m.gender, rank: m.rank })));
@@ -1329,16 +1368,25 @@ export function useGameState() {
         let updatedCourts = prev.courts;
         
         if (courtsToCreate > prev.courts.length) {
-          const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => ({
-            id: `court-${prev.courts.length + i}`,
-            index: prev.courts.length + i + 1,
-            name: indexToLetter(prev.courts.length + i),
-            status: 'available' as const,
-            timerMs: 0,
-            currentTeamId: null,
-            isPaused: false,
-          }));
+          const additionalCourts = Array.from({ length: courtsToCreate - prev.courts.length }, (_, i) => {
+            const courtId = `court-${prev.courts.length + i}`;
+            return {
+              id: courtId,
+              index: prev.courts.length + i + 1,
+              name: courtNamesMap[courtId] || indexToLetter(prev.courts.length + i),
+              status: 'available' as const,
+              timerMs: 0,
+              currentTeamId: null,
+              isPaused: false,
+            };
+          });
           updatedCourts = [...prev.courts, ...additionalCourts];
+        } else {
+          // Apply saved court names to existing courts
+          updatedCourts = prev.courts.map(court => ({
+            ...court,
+            name: courtNamesMap[court.id] || court.name,
+          }));
         }
         
         // First, reset all courts to available

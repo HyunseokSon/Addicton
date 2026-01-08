@@ -437,6 +437,25 @@ app.delete("/make-server-41b22d2d/teams/finished", async (c) => {
   }
 });
 
+// Batch delete teams
+app.post("/make-server-41b22d2d/teams/batch-delete", async (c) => {
+  try {
+    const { teamIds } = await c.req.json();
+    
+    if (!Array.isArray(teamIds) || teamIds.length === 0) {
+      return c.json({ error: "Invalid team IDs" }, 400);
+    }
+
+    await db.batchDeleteTeams(teamIds);
+    
+    console.log(`✅ Batch deleted ${teamIds.length} teams`);
+    return c.json({ success: true, count: teamIds.length });
+  } catch (error) {
+    console.error("Error batch deleting teams:", error);
+    return c.json({ error: "Failed to batch delete teams", details: String(error) }, 500);
+  }
+});
+
 // Delete all teams (for session reset)
 app.delete("/make-server-41b22d2d/teams/all", async (c) => {
   try {
