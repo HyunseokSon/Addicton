@@ -783,7 +783,7 @@ export function useGameState() {
     
     console.log(`✅ Found ${activeCourts.length} active games to end`);
     
-    const allPlayersToUpdate: { id: string, updates: Partial<Player> }[] = [];
+    const allPlayersToUpdate: { id: string, updates: Partial<Player>, recentTeammates: string[] }[] = [];
     const allTeamsToDelete: string[] = [];
     const now = new Date();
     
@@ -813,6 +813,7 @@ export function useGameState() {
               lastGameEndAt: now,
               teammateHistory,
             },
+            recentTeammates: teammates,
           });
         }
       });
@@ -829,7 +830,7 @@ export function useGameState() {
             return {
               ...p,
               ...update.updates,
-              recentTeammates: team.playerIds.filter(id => id !== p.id),
+              recentTeammates: update.recentTeammates,
             };
           }
           return p;

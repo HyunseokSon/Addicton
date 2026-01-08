@@ -124,13 +124,7 @@ export default function App() {
     try {
       await performAutoMatch();
       
-      // Wait for Supabase update to complete before syncing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Sync from Supabase to get the latest data
-      await syncFromSupabase();
-      
-      // Close modal and show success toast
+      // Close modal and show success toast immediately
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('팀 매칭 완료', {
         description: `${newTeamsCount}개 팀이 생성되었습니다.`,
@@ -186,13 +180,7 @@ export default function App() {
     try {
       await startAllQueuedGames();
       
-      // Wait for Supabase update to complete before syncing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Sync from Supabase to get the latest data
-      await syncFromSupabase();
-      
-      // Close modal and show success toast
+      // Close modal and show success toast immediately
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('게임 시작 완료', {
         description: `${teamsToStart}개 팀의 게임이 시작되었습니다.`,
@@ -227,13 +215,7 @@ export default function App() {
     try {
       await endGame(courtId);
       
-      // Wait for Supabase update to complete before syncing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Sync from Supabase to get the latest data
-      await syncFromSupabase();
-      
-      // Close modal and show success toast
+      // Close modal and show success toast immediately
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('게임 종료 완료', {
         description: '참가자들이 대기 상태로 전환되었습니다.',
@@ -271,13 +253,7 @@ export default function App() {
     try {
       const endedCount = await endAllGames();
       
-      // Wait for Supabase update to complete before syncing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Sync from Supabase to get the latest data
-      await syncFromSupabase();
-      
-      // Close modal and show success toast
+      // Close modal and show success toast immediately
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('모든 게임 종료 완료', {
         description: `${endedCount}개의 게임이 종료되었습니다.`,
@@ -497,6 +473,30 @@ export default function App() {
     }
   };
 
+  const handleCourtCountChange = (newCount: number) => {
+    // Validate input range
+    if (newCount < 1 || newCount > 8) {
+      toast.error('코트 수 설정 오류', {
+        description: '코트는 최소 1개, 최대 8개까지 설정할 수 있습니다.',
+      });
+      return;
+    }
+
+    // Check for active games
+    const activeCourtCount = state.courts.filter(c => c.status === 'occupied').length;
+    if (newCount < activeCourtCount) {
+      toast.error('코트 수 변경 불가', {
+        description: `현재 ${activeCourtCount}개의 코트에서 경기가 진행 중입니다. 먼저 경기를 종료해주세요.`,
+      });
+      return;
+    }
+
+    updateSession({ courtsCount: newCount });
+    toast.success('코트 수 변경', {
+      description: `코트가 ${newCount}개로 설정되었습니다.`,
+    });
+  };
+
   const handleSyncFromSupabase = async () => {
     setIsSyncing(true);
     await syncFromSupabase();
@@ -585,23 +585,6 @@ export default function App() {
               <div className="flex items-center gap-1 md:gap-2">
                 {isAdmin && (
                   <>
-                    <div className="flex items-center gap-0.5 md:gap-1 bg-white rounded-lg px-1.5 md:px-2 py-1 md:py-1.5 border">
-                      <button
-                        onClick={() => updateSession({ courtsCount: Math.max(1, (state.session?.courtsCount || 4) - 1) })}
-                        className="size-6 md:size-7 rounded hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all"
-                      >
-                        <span className="text-base md:text-lg">−</span>
-                      </button>
-                      <span className="text-[10px] md:text-xs font-medium min-w-[2.5rem] md:min-w-[3rem] text-center">
-                        코트 {state.session?.courtsCount || 4}
-                      </span>
-                      <button
-                        onClick={() => updateSession({ courtsCount: Math.min(8, (state.session?.courtsCount || 4) + 1) })}
-                        className="size-6 md:size-7 rounded hover:bg-gray-100 active:scale-95 flex items-center justify-center transition-all"
-                      >
-                        <span className="text-base md:text-lg">+</span>
-                      </button>
-                    </div>
                     <button
                       onClick={handleAutoMatch}
                       className="hidden md:inline-flex px-2 md:px-4 py-1 md:py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 font-medium text-[10px] md:text-xs transition-all items-center"
@@ -788,7 +771,10 @@ export default function App() {
           open={showCourtSettings}
           onOpenChange={setShowCourtSettings}
           courts={state.courts}
+          currentCourtCount={state.session?.courtsCount || 4}
+          activeCourtCount={state.courts.filter(c => c.status === 'occupied').length}
           onUpdateCourtNames={updateCourtNames}
+          onUpdateCourtCount={handleCourtCountChange}
         />
 
         {/* End All Games Confirm Dialog */}
