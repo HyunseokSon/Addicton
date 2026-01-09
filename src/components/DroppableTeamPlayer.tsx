@@ -105,7 +105,7 @@ export function DroppableTeamPlayer({
       >
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 min-w-0">
           <div className="flex items-center gap-1.5 xl:gap-2 min-w-0 flex-1">
-            <span className="text-sm xl:text-base truncate">{player.name}</span>
+            <span className="text-sm xl:text-base font-medium whitespace-nowrap">{player.name}</span>
             {player.gender && (
               <Badge variant="outline" className="text-[9px] md:text-xs px-1.5 py-0 flex-shrink-0">
                 {player.gender}
