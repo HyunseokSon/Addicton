@@ -91,11 +91,6 @@ export function ManualTeamDialog({
     return players.filter(p => p.state === 'playing' || p.state === 'queued');
   }, [players]);
 
-  const hasPlayingPlayer = selectedPlayerIds.some(playerId => {
-    const player = players.find(p => p.id === playerId);
-    return player && player.state === 'playing';
-  });
-
   // 플레이어 렌더링 함수
   const renderPlayerList = (playerList: Player[]) => {
     if (playerList.length === 0) {
@@ -108,9 +103,11 @@ export function ManualTeamDialog({
 
     return playerList.map((player) => {
       const isSelected = selectedPlayerIds.includes(player.id);
-      const canSelect = isSelected || selectedPlayerIds.length < teamSize;
       const isPlaying = player.state === 'playing';
       const isQueued = player.state === 'queued';
+      
+      // Allow selecting all players (including playing)
+      const canSelect = isSelected || selectedPlayerIds.length < teamSize;
 
       return (
         <div
@@ -182,12 +179,6 @@ export function ManualTeamDialog({
             <div className="text-sm font-medium">
               선택된 플레이어: {selectedPlayerIds.length} / {teamSize}
             </div>
-            {hasPlayingPlayer && (
-              <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                <UserCheck className="w-3 h-3" />
-                게임 중인 플레이어 포함됨 (게임 종료 후 시작 가능)
-              </div>
-            )}
           </div>
 
           {/* Tabs for waiting/playing players */}

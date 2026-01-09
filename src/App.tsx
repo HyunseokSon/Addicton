@@ -47,6 +47,7 @@ export default function App() {
     description?: string;
     status: 'loading' | 'success' | 'error';
     errorMessage?: string;
+    onClose?: () => void;
   }>({
     open: false,
     title: '',
@@ -343,10 +344,18 @@ export default function App() {
       console.error('❌ End game failed:', error);
       setLoadingModal({
         open: true,
-        title: '게임 종료 실패',
+        title: '데이터 동기화 필요',
         status: 'error',
-        errorMessage: `게임 종료 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: '데이터베이스 업데이트 중 오류가 발생했습니다. 페이지를 새로고침하여 최신 상태를 불러옵니다.',
+        onClose: () => {
+          window.location.reload();
+        }
       });
+      
+      // Auto reload after 3 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
     }
   };
 
@@ -389,10 +398,18 @@ export default function App() {
       console.error('❌ End all games failed:', error);
       setLoadingModal({
         open: true,
-        title: '모든 게임 종료 실패',
+        title: '데이터 동기화 필요',
         status: 'error',
-        errorMessage: `모든 게임 종료 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: '데이터베이스 업데이트 중 오류가 발생했습니다. 페이지를 새로고침하여 최신 상태를 불러옵니다.',
+        onClose: () => {
+          window.location.reload();
+        }
       });
+      
+      // Auto reload after 3 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
     }
   };
 
@@ -1028,6 +1045,7 @@ export default function App() {
           description={loadingModal.description}
           status={loadingModal.status}
           errorMessage={loadingModal.errorMessage}
+          onClose={loadingModal.onClose}
         />
 
         {/* Mobile Floating Action Buttons */}

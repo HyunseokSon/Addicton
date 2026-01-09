@@ -30,6 +30,20 @@ export function MatchingArea({
   isAdmin,
 }: MatchingAreaProps) {
   const queuedTeams = teams || [];
+  
+  // 🔍 DEBUG: Log players data
+  console.log('📋 MatchingArea received:', {
+    queuedTeamsCount: queuedTeams.length,
+    queuedTeams: queuedTeams.map(t => ({
+      id: t.id,
+      name: t.name,
+      playerIds: t.playerIds,
+      state: t.state
+    })),
+    playersCount: players.length,
+    playingPlayers: players.filter(p => p.state === 'playing').map(p => ({ id: p.id, name: p.name, state: p.state })),
+    queuedPlayers: players.filter(p => p.state === 'queued').map(p => ({ id: p.id, name: p.name, state: p.state }))
+  });
 
   return (
     <div className="space-y-4">

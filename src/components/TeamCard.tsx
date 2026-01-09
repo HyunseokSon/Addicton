@@ -24,6 +24,16 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
   // Check if any player in the team is currently playing
   const hasPlayingPlayer = teamPlayers.some(p => p.state === 'playing');
   
+  // 🔍 DEBUG: Log team status
+  console.log(`🎯 TeamCard [${team.name}]:`, {
+    teamId: team.id,
+    teamState: team.state,
+    playerIds: team.playerIds,
+    teamPlayers: teamPlayers.map(p => ({ id: p.id, name: p.name, state: p.state })),
+    hasPlayingPlayer,
+    buttonDisabled: availableCourtCount === 0 || hasPlayingPlayer
+  });
+  
   const handleSwap = (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
     if (onSwapPlayer) {
       onSwapPlayer(waitingPlayerId, teamId, queuedPlayerId);

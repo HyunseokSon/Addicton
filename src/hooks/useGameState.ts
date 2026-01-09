@@ -91,21 +91,32 @@ export function useGameState() {
           
           console.log(`   Keeping ${teamsToKeepPlaying.length} playing teams, moving ${teamsToMoveToQueued.length} back to queued`);
           
-          // Update teams to queued in Supabase
-          for (const team of teamsToMoveToQueued) {
-            await teamsApi.update(team.id, {
-              state: 'queued',
-              assignedCourtId: null,
-              startedAt: null,
-            });
-            console.log(`   ✅ Moved team ${team.name} back to queued`);
+          // Update teams and players in parallel using batches
+          if (teamsToMoveToQueued.length > 0) {
+            // Prepare all team updates
+            const teamUpdatePromises = teamsToMoveToQueued.map(team =>
+              teamsApi.update(team.id, {
+                state: 'queued',
+                assignedCourtId: null,
+                startedAt: null,
+              })
+            );
             
-            // Update players back to queued
-            const playerUpdates = team.playerIds.map(playerId => ({
-              playerId,
-              updates: { state: 'queued' as const }
-            }));
-            await playersApi.updateBatch(playerUpdates);
+            // Prepare all player updates in one batch
+            const allPlayerUpdates = teamsToMoveToQueued.flatMap(team =>
+              team.playerIds.map(playerId => ({
+                playerId,
+                updates: { state: 'queued' as const }
+              }))
+            );
+            
+            // Execute all updates in parallel
+            await Promise.all([
+              ...teamUpdatePromises,
+              allPlayerUpdates.length > 0 ? playersApi.updateBatch(allPlayerUpdates) : Promise.resolve()
+            ]);
+            
+            console.log(`   ✅ Moved ${teamsToMoveToQueued.length} teams and ${allPlayerUpdates.length} players back to queued`);
           }
           
           // Refresh active teams
@@ -515,22 +526,27 @@ export function useGameState() {
       newTeamsToCreate = newTeams;
       playersToUpdate = newTeams.flatMap((t) => t.playerIds);
       
-      // Save new teams to Supabase FIRST
+      // Save teams and update players in parallel
+      const promises: Promise<any>[] = [];
+      
       if (newTeamsToCreate.length > 0) {
         console.log(`📤 Saving ${newTeamsToCreate.length} teams to Supabase...`);
-        await teamsApi.addBatch(newTeamsToCreate);
-        console.log(`✅ Saved ${newTeamsToCreate.length} teams to Supabase`);
+        promises.push(teamsApi.addBatch(newTeamsToCreate));
       }
       
-      // Update player states in Supabase using BATCH UPDATE
       if (playersToUpdate.length > 0) {
         console.log(`📤 Batch updating ${playersToUpdate.length} players to queued state...`);
         const playerUpdates = playersToUpdate.map((playerId) => ({
           playerId,
           updates: { state: 'queued' as const }
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Batch updated ${playersToUpdate.length} players to queued state in Supabase`);
+        promises.push(playersApi.updateBatch(playerUpdates));
+      }
+      
+      // Execute all updates in parallel
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        console.log(`✅ Saved ${newTeamsToCreate.length} teams and updated ${playersToUpdate.length} players in parallel`);
       }
       
       // NOW update local state
@@ -666,24 +682,27 @@ export function useGameState() {
       
       console.log(`✅ Local state updated, now updating Supabase...`);
       
-      // Update team state in Supabase
-      await teamsApi.update(teamId, {
-        state: 'playing',
-        assignedCourtId: targetCourtId,
-        startedAt: new Date(),
-      });
-      console.log(`✅ Updated team ${teamId} to playing with courtId ${targetCourtId} in Supabase`);
+      // Update team and players in parallel
+      const promises: Promise<any>[] = [
+        teamsApi.update(teamId, {
+          state: 'playing',
+          assignedCourtId: targetCourtId,
+          startedAt: new Date(),
+        })
+      ];
       
-      // Batch update player states to 'playing' in Supabase
       if (playersToUpdate.length > 0) {
         console.log(`📤 Batch updating ${playersToUpdate.length} players to playing state...`);
         const playerUpdates = playersToUpdate.map((playerId) => ({
           playerId,
           updates: { state: 'playing' as const }
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Batch updated ${playersToUpdate.length} players to playing state in Supabase`);
+        promises.push(playersApi.updateBatch(playerUpdates));
       }
+      
+      await Promise.all(promises);
+      console.log(`✅ Updated team ${teamId} and ${playersToUpdate.length} players to playing in parallel`);
+
       
       addAuditLog('game_started', { teamId, courtId });
       return { success: true };
@@ -956,22 +975,26 @@ export function useGameState() {
         };
       });
       
-      console.log('✅ Local state updated, now syncing to Supabase...');
+      // ⚠️ NOW sync to Supabase - if this fails, local state will be rolled back by error handler
+      console.log('📤 Syncing to Supabase...');
       
-      // Delete team from Supabase
-      await teamsApi.delete(teamToDelete);
-      console.log(`✅ Deleted team ${teamToDelete} from Supabase`);
+      // Delete team and update players in parallel
+      const promises: Promise<any>[] = [
+        teamsApi.delete(teamToDelete)
+      ];
       
-      // Update all players' game counts, state, and teammate history in Supabase using BATCH UPDATE
       if (playersToUpdate.length > 0) {
         console.log(`📤 Batch updating ${playersToUpdate.length} players' game data and state in Supabase...`);
         const playerUpdates = playersToUpdate.map(({ id, updates }) => ({
           playerId: id,
           updates: updates,
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Batch updated ${playersToUpdate.length} players' game data and state in Supabase`);
+        promises.push(playersApi.updateBatch(playerUpdates));
       }
+      
+      await Promise.all(promises);
+      console.log(`✅ Deleted team and updated ${playersToUpdate.length} players in Supabase`);
+
       
       addAuditLog('game_ended', { courtId });
       console.log('✅ endGame completed');
@@ -1080,8 +1103,10 @@ export function useGameState() {
         };
       });
       
-      // Update Supabase - batch all updates
+      // Update Supabase - batch all updates in parallel
       console.log('📤 Updating Supabase with batch changes...');
+      
+      const promises: Promise<any>[] = [];
       
       // Batch update players in Supabase
       if (allPlayersToUpdate.length > 0) {
@@ -1090,15 +1115,19 @@ export function useGameState() {
           playerId: id,
           updates,
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Batch updated ${allPlayersToUpdate.length} players in Supabase`);
+        promises.push(playersApi.updateBatch(playerUpdates));
       }
       
       // Batch delete teams in Supabase
       if (allTeamsToDelete.length > 0) {
         console.log(`📤 Batch deleting ${allTeamsToDelete.length} teams in Supabase...`);
-        await teamsApi.deleteBatch(allTeamsToDelete);
-        console.log(`✅ Batch deleted ${allTeamsToDelete.length} teams in Supabase`);
+        promises.push(teamsApi.deleteBatch(allTeamsToDelete));
+      }
+      
+      // Execute all updates in parallel
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        console.log(`✅ Updated ${allPlayersToUpdate.length} players and deleted ${allTeamsToDelete.length} teams in parallel`);
       }
       
       console.log('✅ All games ended successfully in Supabase');
@@ -1233,21 +1262,23 @@ export function useGameState() {
         };
       });
       
-      // Delete team from Supabase
-      await teamsApi.delete(teamId);
+      // Delete team and update players in parallel
+      const promises: Promise<any>[] = [
+        teamsApi.delete(teamId)
+      ];
       
-      // Update only the players that need to be reset to waiting
       if (playersToResetToWaiting.length > 0) {
         console.log(`📤 Resetting ${playersToResetToWaiting.length} players to waiting state...`);
         const playerUpdates = playersToResetToWaiting.map(playerId => ({
           playerId,
           updates: { state: 'waiting' as const }
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Reset ${playersToResetToWaiting.length} players to waiting state`);
+        promises.push(playersApi.updateBatch(playerUpdates));
       }
       
-      console.log(`✅ Deleted team ${teamId} from Supabase`);
+      await Promise.all(promises);
+      console.log(`✅ Deleted team ${teamId} and reset ${playersToResetToWaiting.length} players in parallel`);
+
       addAuditLog('team_deleted', { teamId });
     } catch (error) {
       console.error('Failed to delete team from Supabase:', error);
@@ -1348,11 +1379,14 @@ export function useGameState() {
       };
       
       console.log('📤 Saving manual team to Supabase...');
-      await teamsApi.add(newTeam);
-      console.log('✅ Saved manual team to Supabase');
       
       // Update player states to 'queued' (only for waiting players)
       const waitingPlayerIds = players.filter(p => p.state === 'waiting').map(p => p.id);
+      
+      // Save team and update players in parallel
+      const promises: Promise<any>[] = [
+        teamsApi.add(newTeam)
+      ];
       
       if (waitingPlayerIds.length > 0) {
         console.log(`📤 Updating ${waitingPlayerIds.length} waiting players to queued state...`);
@@ -1360,9 +1394,12 @@ export function useGameState() {
           playerId,
           updates: { state: 'queued' as const }
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Updated ${waitingPlayerIds.length} players to queued state`);
+        promises.push(playersApi.updateBatch(playerUpdates));
       }
+      
+      await Promise.all(promises);
+      console.log(`✅ Saved manual team and updated ${waitingPlayerIds.length} players in parallel`);
+
       
       // Update local state
       setState((prev) => {
@@ -1406,11 +1443,14 @@ export function useGameState() {
       const allPlayers = state.players;
       console.log(`Found ${allPlayers.length} players to reset game stats`);
       
-      // 4. Delete ALL teams (playing + queued) from Supabase
+      // 4. Delete ALL teams (playing + queued) and reset players in parallel
       const allTeamIds = [...playingTeams, ...queuedTeams].map(t => t.id);
+      
+      const promises: Promise<any>[] = [];
+      
       if (allTeamIds.length > 0) {
-        await Promise.all(allTeamIds.map(teamId => teamsApi.delete(teamId)));
-        console.log(`✅ Deleted ${allTeamIds.length} teams from Supabase`);
+        console.log(`📤 Batch deleting ${allTeamIds.length} teams from Supabase...`);
+        promises.push(teamsApi.deleteBatch(allTeamIds));
       }
       
       // 5. Reset ALL players' game stats in Supabase (keep players, just reset stats)
@@ -1426,8 +1466,13 @@ export function useGameState() {
             teammateHistory: {},
           }
         }));
-        await playersApi.updateBatch(playerUpdates);
-        console.log(`✅ Batch reset ${allPlayers.length} players' game stats in Supabase`);
+        promises.push(playersApi.updateBatch(playerUpdates));
+      }
+      
+      // Execute all updates in parallel
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        console.log(`✅ Deleted ${allTeamIds.length} teams and reset ${allPlayers.length} players in parallel`);
       }
       
       // 6. Update local state - KEEP players, just reset their stats
@@ -1734,17 +1779,38 @@ export function useGameState() {
         // Sync player states with team data
         // Build a map of player IDs to their team state
         const playerTeamStateMap = new Map<string, 'queued' | 'playing'>();
+        const duplicatePlayers = new Set<string>();
+        
         activeTeams.forEach(team => {
           team.playerIds.forEach(playerId => {
-            playerTeamStateMap.set(playerId, team.state);
+            // ⚠️ CRITICAL: If a player is in multiple teams, prioritize 'playing' over 'queued'
+            const currentState = playerTeamStateMap.get(playerId);
+            if (currentState) {
+              duplicatePlayers.add(playerId);
+              console.log(`⚠️ Player ${playerId} is in multiple teams! Current: ${currentState}, New: ${team.state}`);
+            }
+            
+            if (!currentState || (currentState === 'queued' && team.state === 'playing')) {
+              playerTeamStateMap.set(playerId, team.state);
+              if (currentState) {
+                console.log(`✅ Prioritizing '${team.state}' over '${currentState}' for player ${playerId}`);
+              }
+            }
           });
         });
+        
+        if (duplicatePlayers.size > 0) {
+          console.log(`🔍 Found ${duplicatePlayers.size} players in multiple teams:`, Array.from(duplicatePlayers));
+        }
         
         // Update player states based on team data
         const syncedPlayers = playersFromDb.map(player => {
           const teamState = playerTeamStateMap.get(player.id);
           if (teamState) {
             // Player is in an active team, sync their state
+            if (player.state !== teamState) {
+              console.log(`🔄 Syncing player ${player.name}: ${player.state} → ${teamState}`);
+            }
             return { ...player, state: teamState };
           } else if (player.state === 'queued' || player.state === 'playing') {
             // Player thinks they're in a team but they're not - reset to waiting
