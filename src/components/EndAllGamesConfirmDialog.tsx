@@ -23,6 +23,7 @@ export function EndAllGamesConfirmDialog({
   onConfirm,
 }: EndAllGamesConfirmDialogProps) {
   const handleConfirm = () => {
+    console.log('🎯 End All Games Confirm button clicked');
     onConfirm();
     onOpenChange(false);
   };

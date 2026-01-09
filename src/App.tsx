@@ -32,13 +32,6 @@ import {
 type UserRole = 'admin' | 'member' | null;
 
 export default function App() {
-  // Clear localStorage on app start to force Supabase-only operation
-  useEffect(() => {
-    console.log('🗑️ Clearing all localStorage data...');
-    localStorage.clear();
-    console.log('✅ localStorage cleared - now using Supabase only');
-  }, []);
-
   const [isSyncing, setIsSyncing] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
@@ -84,6 +77,63 @@ export default function App() {
     syncFromSupabase,
     resetMembers,
   } = useGameState();
+
+  // Clear localStorage on app start to force Supabase-only operation
+  useEffect(() => {
+    console.log('🗑️ Clearing all localStorage data...');
+    localStorage.clear();
+    console.log('✅ localStorage cleared - now using Supabase only');
+  }, []);
+
+  // Periodic sync every 2 minutes to keep data fresh
+  useEffect(() => {
+    // Only sync after role selection (when user is on the main app screen)
+    // No sync needed on RoleSelection screen
+    if (!userRole) return;
+
+    // Sync every 1 minute (60 seconds)
+    const SYNC_INTERVAL = 60000; // 1 minute
+    
+    console.log(`⏰ Setting up periodic sync (every ${SYNC_INTERVAL / 1000} seconds)...`);
+    const intervalId = setInterval(async () => {
+      console.log('🔄 Periodic sync triggered...');
+      try {
+        await syncFromSupabase();
+        console.log('✅ Periodic sync completed');
+      } catch (error) {
+        console.error('⚠️ Periodic sync failed:', error);
+      }
+    }, SYNC_INTERVAL);
+
+    return () => {
+      console.log('🛑 Clearing periodic sync interval');
+      clearInterval(intervalId);
+    };
+  }, [userRole, syncFromSupabase]);
+
+  // Sync when page becomes visible again (user returns to tab)
+  useEffect(() => {
+    // Only sync when user is on the main app screen
+    if (!userRole) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Page became visible, syncing data...');
+        try {
+          await syncFromSupabase();
+          console.log('✅ Visibility sync completed');
+        } catch (error) {
+          console.error('⚠️ Visibility sync failed:', error);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userRole, syncFromSupabase]);
 
   const handleAutoMatch = async () => {
     const eligibleCount = state.players.filter(
@@ -198,22 +248,54 @@ export default function App() {
   };
 
   const handleEndGame = async (courtId: string) => {
-    const court = state.courts.find((c) => c.id === courtId);
-    if (!court || !court.currentTeamId) return;
-
-    const team = state.teams.find((t) => t.id === court.currentTeamId);
-    if (!team) return;
-
-    // Show loading modal
+    console.log('🎮 handleEndGame called for court:', courtId);
+    
+    // Show loading modal immediately
     setLoadingModal({
       open: true,
-      title: '게임 종료 중',
-      description: '게임을 종료하고 참가자들을 대기 상태로 전환하고 있습니다...',
+      title: '최신 데이터 확인 중',
+      description: 'Supabase에서 최신 데이터를 가져오고 있습니다...',
       status: 'loading',
     });
 
     try {
+      // First, sync to get the latest data
+      console.log('🔄 Syncing from Supabase before ending game...');
+      await syncFromSupabase();
+      console.log('✅ Sync completed, now checking court status...');
+
+      // Re-check court and team after sync
+      const court = state.courts.find((c) => c.id === courtId);
+      if (!court || !court.currentTeamId) {
+        console.log('⚠️ Court or team not found after sync');
+        setLoadingModal({ open: false, title: '', status: 'loading' });
+        toast.error('게임 종료 실패', {
+          description: '코트 정보를 찾을 수 없습니다.',
+        });
+        return;
+      }
+
+      const team = state.teams.find((t) => t.id === court.currentTeamId);
+      if (!team) {
+        console.log('⚠️ Team not found after sync');
+        setLoadingModal({ open: false, title: '', status: 'loading' });
+        toast.error('게임 종료 실패', {
+          description: '팀 정보를 찾을 수 없습니다.',
+        });
+        return;
+      }
+
+      // Update loading modal
+      setLoadingModal({
+        open: true,
+        title: '게임 종료 중',
+        description: '게임을 종료하고 참가자들을 대기 상태로 전환하고 있습니다...',
+        status: 'loading',
+      });
+
+      console.log('📤 Calling endGame...');
       await endGame(courtId);
+      console.log('✅ endGame completed');
       
       // Close modal and show success toast immediately
       setLoadingModal(prev => ({ ...prev, open: false }));
@@ -222,20 +304,24 @@ export default function App() {
       });
 
     } catch (error) {
-      console.error('End game failed:', error);
+      console.error('❌ End game failed:', error);
       setLoadingModal({
         open: true,
         title: '게임 종료 실패',
         status: 'error',
-        errorMessage: '게임 종료 중 오류가 발생했습니다. 다시 시도해주세요.',
+        errorMessage: `게임 종료 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
   };
 
   const handleEndAllGames = async () => {
+    console.log('🎮 handleEndAllGames called');
     const activeCourts = state.courts.filter((c) => c.status === 'occupied');
     
+    console.log(`📊 Active courts count: ${activeCourts.length}`, activeCourts.map(c => ({ id: c.id, teamId: c.currentTeamId })));
+    
     if (activeCourts.length === 0) {
+      console.log('❌ No active games to end');
       toast.error('종료 실패', {
         description: '진행중인 게임이 없습니다.',
       });
@@ -243,6 +329,7 @@ export default function App() {
     }
 
     // Show loading modal
+    console.log('🔄 Showing loading modal...');
     setLoadingModal({
       open: true,
       title: '모든 게임 종료 중',
@@ -251,21 +338,24 @@ export default function App() {
     });
 
     try {
+      console.log('📤 Calling endAllGames()...');
       const endedCount = await endAllGames();
+      console.log(`✅ endAllGames completed, ended ${endedCount} games`);
       
       // Close modal and show success toast immediately
+      console.log('✅ Closing loading modal and showing success toast');
       setLoadingModal(prev => ({ ...prev, open: false }));
       toast.success('모든 게임 종료 완료', {
         description: `${endedCount}개의 게임이 종료되었습니다.`,
       });
 
     } catch (error) {
-      console.error('End all games failed:', error);
+      console.error('❌ End all games failed:', error);
       setLoadingModal({
         open: true,
         title: '모든 게임 종료 실패',
         status: 'error',
-        errorMessage: '모든 게임 종료 중 오류가 발생했습니다. 다시 시도해주세요.',
+        errorMessage: `모든 게임 종료 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
   };
