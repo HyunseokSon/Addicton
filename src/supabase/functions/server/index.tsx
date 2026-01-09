@@ -505,6 +505,50 @@ app.put("/make-server-41b22d2d/settings/:key", async (c) => {
   }
 });
 
+// ===== ADMIN PASSWORD =====
+
+// Verify admin password
+app.post("/make-server-41b22d2d/admin-password/verify", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { password } = body;
+    
+    if (!password) {
+      return c.json({ valid: false, error: "Password is required" }, 400);
+    }
+
+    const storedPassword = await db.getSetting("admin_password");
+    
+    // If no password is set, default to "admin"
+    const validPassword = storedPassword || "admin";
+    const isValid = password === validPassword;
+    
+    return c.json({ valid: isValid });
+  } catch (error) {
+    console.error("Error verifying admin password:", error);
+    return c.json({ valid: false, error: "Failed to verify password", details: String(error) }, 500);
+  }
+});
+
+// Set admin password
+app.post("/make-server-41b22d2d/admin-password/set", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { password } = body;
+    
+    if (!password) {
+      return c.json({ success: false, error: "Password is required" }, 400);
+    }
+
+    await db.setSetting("admin_password", password);
+    
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error setting admin password:", error);
+    return c.json({ success: false, error: "Failed to set password", details: String(error) }, 500);
+  }
+});
+
 // ============= DATA MIGRATION ENDPOINT =============
 
 // Check what's in KV store
