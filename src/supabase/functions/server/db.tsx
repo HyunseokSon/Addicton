@@ -347,3 +347,39 @@ export async function setSetting(key: string, value: string) {
     throw new Error(`Failed to set setting: ${error.message}`);
   }
 }
+
+// ============= BATCH OPERATIONS =============
+
+// ⚡ Get all data in parallel for faster loading
+export async function getAllData() {
+  const [
+    settingsResult,
+    membersResult,
+    playersResult,
+    teamsResult,
+  ] = await Promise.allSettled([
+    supabase.from("settings").select("*"),
+    supabase.from("members").select("*").order("created_at", { ascending: true }),
+    supabase.from("players").select("*").order("created_at", { ascending: true }),
+    supabase.from("teams").select("*").order("created_at", { ascending: true }),
+  ]);
+
+  // Extract data or handle errors
+  const settings = settingsResult.status === "fulfilled" ? settingsResult.value.data || [] : [];
+  const members = membersResult.status === "fulfilled" ? membersResult.value.data || [] : [];
+  const players = playersResult.status === "fulfilled" ? playersResult.value.data || [] : [];
+  const teams = teamsResult.status === "fulfilled" ? teamsResult.value.data || [] : [];
+
+  // Convert settings array to map
+  const settingsMap: Record<string, string> = {};
+  settings.forEach((s: any) => {
+    settingsMap[s.key] = s.value;
+  });
+
+  return {
+    settings: settingsMap,
+    members,
+    players,
+    teams,
+  };
+}

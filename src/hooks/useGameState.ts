@@ -7,6 +7,7 @@ import { membersApi } from '../utils/api/membersApi';
 import { playersApi } from '../utils/api/playersApi';
 import { teamsApi } from '../utils/api/teamsApi';
 import { settingsApi } from '../utils/api/settingsApi';
+import { batchApi } from '../utils/api/batchApi';
 
 // Convert index to letter (0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, etc.)
 function indexToLetter(index: number): string {
@@ -63,25 +64,17 @@ export function useGameState() {
     const loadFromSupabase = async () => {
       try {
         console.log('🔄 Loading all data from Supabase...');
+        const startTime = performance.now();
         
-        // Load courtsCount from settings
-        const courtsCountStr = await settingsApi.get('courts_count');
-        const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
-        console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
+        // ⚡ BATCH LOADING - Get all data in one request
+        const { members: membersFromDb, players: playersFromDb, teams: teamsFromDb, settings } = await batchApi.getAllData();
         
-        // Load court names from settings
-        const courtNamesStr = await settingsApi.get('court_names');
-        const courtNamesMap: Record<string, string> = courtNamesStr ? JSON.parse(courtNamesStr) : {};
-        console.log(`📊 Loaded court names:`, courtNamesMap);
+        const courtsCount = settings.courts_count ? parseInt(settings.courts_count, 10) : 4;
+        const courtNamesMap: Record<string, string> = settings.court_names ? JSON.parse(settings.court_names) : {};
         
-        // Load members
-        const membersFromDb = await membersApi.getAll();
+        const loadTime = performance.now() - startTime;
+        console.log(`⚡ Batch loaded all data in ${loadTime.toFixed(0)}ms: ${courtsCount} courts, ${membersFromDb.length} members, ${playersFromDb.length} players, ${teamsFromDb.length} teams`);
         
-        // Load players
-        const playersFromDb = await playersApi.getAll();
-        
-        // Load teams
-        const teamsFromDb = await teamsApi.getAll();
         let activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
         
         // 🧹 DATA CLEANUP: Fix teams that exceed court capacity
@@ -1168,11 +1161,16 @@ export function useGameState() {
 
   const adjustGameCount = useCallback(async (playerId: string, delta: number) => {
     let newGameCount = 0;
+    let playerFound = false;
     
     setState((prev) => {
       const player = prev.players.find(p => p.id === playerId);
-      if (!player) return prev;
+      if (!player) {
+        console.warn(`Player ${playerId} not found for game count adjustment`);
+        return prev;
+      }
       
+      playerFound = true;
       newGameCount = Math.max(0, player.gameCount + delta);
       
       return {
@@ -1185,6 +1183,9 @@ export function useGameState() {
       };
     });
     
+    // Only update Supabase if player was found
+    if (!playerFound) return;
+    
     // Update game count in Supabase
     try {
       await playersApi.update(playerId, { gameCount: newGameCount });
@@ -1193,7 +1194,7 @@ export function useGameState() {
       console.error('Failed to update game count in Supabase:', error);
     }
     
-    addAuditLog('game_count_adjusted', { playerId, delta });
+    addAuditLog('game_count_adjusted', { playerId, delta, newGameCount });
   }, [addAuditLog]);
 
   const deleteTeam = useCallback(async (teamId: string) => {
@@ -1652,28 +1653,20 @@ export function useGameState() {
   const syncFromSupabase = useCallback(async () => {
     try {
       console.log('🔄 Manual sync from Supabase...');
+      const startTime = performance.now();
       
-      // Load courtsCount from settings
-      const courtsCountStr = await settingsApi.get('courts_count');
-      const courtsCount = courtsCountStr ? parseInt(courtsCountStr, 10) : 4;
-      console.log(`📊 Loaded courtsCount: ${courtsCount} from Supabase settings`);
+      // ⚡ BATCH LOADING - Get all data in one request
+      const { members: membersFromDb, players: playersFromDb, teams: teamsFromDb, settings } = await batchApi.getAllData();
       
-      // Load court names from settings
-      const courtNamesStr = await settingsApi.get('court_names');
-      const courtNamesMap: Record<string, string> = courtNamesStr ? JSON.parse(courtNamesStr) : {};
-      console.log(`📊 Loaded court names:`, courtNamesMap);
+      const courtsCount = settings.courts_count ? parseInt(settings.courts_count, 10) : 4;
+      const courtNamesMap: Record<string, string> = settings.court_names ? JSON.parse(settings.court_names) : {};
       
-      // Load members
-      const membersFromDb = await membersApi.getAll();
-      console.log(`📦 Loaded ${membersFromDb.length} members from Supabase:`, membersFromDb.map(m => ({ id: m.id, name: m.name, gender: m.gender, rank: m.rank })));
+      const loadTime = performance.now() - startTime;
+      console.log(`⚡ Batch synced all data in ${loadTime.toFixed(0)}ms: ${membersFromDb.length} members, ${playersFromDb.length} players, ${teamsFromDb.length} teams, ${courtsCount} courts`);
       
-      // Load players
-      const playersFromDb = await playersApi.getAll();
-      console.log(`👥 Loaded ${playersFromDb.length} players from Supabase:`, playersFromDb.map(p => ({ id: p.id, name: p.name, state: p.state, gender: p.gender, rank: p.rank })));
-      
-      // Load teams
-      const teamsFromDb = await teamsApi.getAll();
-      console.log(`🏐 RAW teams from Supabase:`, teamsFromDb.map(t => ({ id: t.id, name: t.name, state: t.state, assignedCourtId: t.assignedCourtId, playerIds: t.playerIds })));
+      console.log(`📦 Members:`, membersFromDb.map(m => ({ id: m.id, name: m.name, gender: m.gender, rank: m.rank })));
+      console.log(`👥 Players:`, playersFromDb.map(p => ({ id: p.id, name: p.name, state: p.state, gender: p.gender, rank: p.rank })));
+      console.log(`🏐 RAW teams:`, teamsFromDb.map(t => ({ id: t.id, name: t.name, state: t.state, assignedCourtId: t.assignedCourtId, playerIds: t.playerIds })));
       
       const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
       const finishedTeams = teamsFromDb.filter(t => t.state === 'finished');

@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Player, PlayerState } from '../types';
 import { Badge } from './ui/badge';
-import { MoreVertical, Plus, Minus, Trash2 } from 'lucide-react';
+import { MoreVertical, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
+import { AdjustGameCountModal } from './AdjustGameCountModal';
 
 interface RestingPlayersPanelProps {
   players: Player[];
@@ -26,9 +28,19 @@ export function RestingPlayersPanel({
   onDeletePlayer,
   readOnly,
 }: RestingPlayersPanelProps) {
+  const [gameCountModalPlayer, setGameCountModalPlayer] = useState<Player | null>(null);
+  
   const restingPlayers = players
     .filter((p) => p.state === 'resting')
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  const handleGameCountAdjust = (playerId: string, newGameCount: number) => {
+    const player = players.find(p => p.id === playerId);
+    if (player) {
+      const delta = newGameCount - player.gameCount;
+      onAdjustGameCount(playerId, delta);
+    }
+  };
 
   return (
     <div>
@@ -58,9 +70,21 @@ export function RestingPlayersPanel({
                 <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">
                   휴식중
                 </Badge>
-                <span className="text-[10px] md:text-xs text-gray-500">
-                  {player.gameCount}경기
-                </span>
+                {!readOnly ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setGameCountModalPlayer(player)}
+                    className="h-6 px-2 hover:bg-blue-50 hover:border-blue-300"
+                    title="경기수 조정"
+                  >
+                    <span className="text-[10px] md:text-xs text-gray-700 font-mono">{player.gameCount}경기</span>
+                  </Button>
+                ) : (
+                  <span className="text-[10px] md:text-xs text-gray-500">
+                    {player.gameCount}경기
+                  </span>
+                )}
                 {player.gender && (
                   <Badge variant="outline" className="text-[10px]">
                     {player.gender}
@@ -95,18 +119,6 @@ export function RestingPlayersPanel({
                     
                     <DropdownMenuSeparator />
                     
-                    <DropdownMenuLabel>경기수 조정</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => onAdjustGameCount(player.id, 1)}>
-                      <Plus className="size-4 mr-2" />
-                      경기수 +1
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onAdjustGameCount(player.id, -1)}>
-                      <Minus className="size-4 mr-2" />
-                      경기수 -1
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
                     <DropdownMenuItem 
                       onClick={() => onDeletePlayer(player.id)}
                       className="text-red-600"
@@ -121,6 +133,13 @@ export function RestingPlayersPanel({
           ))
         )}
       </div>
+      
+      <AdjustGameCountModal
+        player={gameCountModalPlayer}
+        open={gameCountModalPlayer !== null}
+        onOpenChange={(open) => !open && setGameCountModalPlayer(null)}
+        onConfirm={handleGameCountAdjust}
+      />
     </div>
   );
 }

@@ -25,6 +25,21 @@ app.get("/make-server-41b22d2d/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+// ⚡ Get all data at once for faster loading
+app.get("/make-server-41b22d2d/all-data", async (c) => {
+  try {
+    const startTime = performance.now();
+    const data = await db.getAllData();
+    const duration = performance.now() - startTime;
+    
+    console.log(`⚡ Batch loaded all data in ${duration.toFixed(0)}ms`);
+    return c.json(data);
+  } catch (error) {
+    console.error("Error getting all data:", error);
+    return c.json({ error: "Failed to get all data", details: String(error) }, 500);
+  }
+});
+
 // Get all members
 app.get("/make-server-41b22d2d/members", async (c) => {
   try {

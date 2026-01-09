@@ -8,6 +8,7 @@ import { UserPlus, Edit2, Trash2, Check, X, GripVertical, Plus, Minus, ChevronDo
 import { ItemTypes } from './DraggablePlayerChip';
 import { PlayerHistoryDialog } from './PlayerHistoryDialog';
 import { SwapPlayerWithTeamDialog } from './SwapPlayerWithTeamDialog';
+import { AdjustGameCountModal } from './AdjustGameCountModal';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -274,6 +275,7 @@ function WaitingPlayerCard({
   readOnly,
 }: WaitingPlayerCardProps) {
   const [showHistory, setShowHistory] = useState(false);
+  const [showGameCountModal, setShowGameCountModal] = useState(false);
   
   // Make waiting players draggable
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -284,6 +286,11 @@ function WaitingPlayerCard({
       isDragging: monitor.isDragging(),
     }),
   }), [player.id, readOnly]);
+
+  const handleGameCountAdjust = (playerId: string, newGameCount: number) => {
+    const delta = newGameCount - player.gameCount;
+    onAdjustGameCount(playerId, delta);
+  };
 
   return (
     <div
@@ -362,23 +369,12 @@ function WaitingPlayerCard({
               <div className="flex items-center gap-1">
                 <Button
                   size="sm"
-                  variant="ghost"
-                  onClick={() => onAdjustGameCount(player.id, -1)}
-                  disabled={player.gameCount <= 0}
-                  className="size-6 p-0 hover:bg-red-50"
-                  title="게임 수 감소"
+                  variant="outline"
+                  onClick={() => setShowGameCountModal(true)}
+                  className="h-7 px-3 hover:bg-blue-50 hover:border-blue-300"
+                  title="경기수 조정"
                 >
-                  <Minus className="size-3" />
-                </Button>
-                <span className="text-xs text-gray-700 mx-1 font-mono min-w-[28px] text-center">{player.gameCount}회</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onAdjustGameCount(player.id, 1)}
-                  className="size-6 p-0 hover:bg-green-50"
-                  title="게임 수 증가"
-                >
-                  <Plus className="size-3" />
+                  <span className="text-xs text-gray-700 font-mono">{player.gameCount}회</span>
                 </Button>
               </div>
             ) : (
@@ -415,6 +411,12 @@ function WaitingPlayerCard({
         allPlayers={allPlayers}
         open={showHistory}
         onOpenChange={setShowHistory}
+      />
+      <AdjustGameCountModal
+        player={player}
+        open={showGameCountModal}
+        onOpenChange={setShowGameCountModal}
+        onConfirm={handleGameCountAdjust}
       />
     </div>
   );
