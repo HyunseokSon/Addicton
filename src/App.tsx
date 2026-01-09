@@ -91,8 +91,8 @@ export default function App() {
     // No sync needed on RoleSelection screen
     if (!userRole) return;
 
-    // Sync every 1 minute (60 seconds)
-    const SYNC_INTERVAL = 60000; // 1 minute
+    // Sync every 2 minutes (120 seconds)
+    const SYNC_INTERVAL = 120000; // 2 minutes
     
     console.log(`⏰ Setting up periodic sync (every ${SYNC_INTERVAL / 1000} seconds)...`);
     const intervalId = setInterval(async () => {
@@ -119,11 +119,31 @@ export default function App() {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         console.log('👁️ Page became visible, syncing data...');
+        
+        // Show loading modal
+        setLoadingModal({
+          open: true,
+          title: '데이터 동기화 중',
+          description: '최신 상태를 가져오고 있습니다...',
+          status: 'loading',
+        });
+        
         try {
           await syncFromSupabase();
           console.log('✅ Visibility sync completed');
+          
+          // Close modal without toast (silent sync)
+          setLoadingModal(prev => ({ ...prev, open: false }));
         } catch (error) {
           console.error('⚠️ Visibility sync failed:', error);
+          
+          // Show error modal
+          setLoadingModal({
+            open: true,
+            title: '동기화 실패',
+            status: 'error',
+            errorMessage: '데이터를 가져오는 중 오류가 발생했습니다. 새로고침 버튼을 눌러 다시 시도해주세요.',
+          });
         }
       }
     };
@@ -253,47 +273,15 @@ export default function App() {
     // Show loading modal immediately
     setLoadingModal({
       open: true,
-      title: '최신 데이터 확인 중',
-      description: 'Supabase에서 최신 데이터를 가져오고 있습니다...',
+      title: '게임 종료 중',
+      description: '게임을 종료하고 참가자들을 대기 상태로 전환하고 있습니다...',
       status: 'loading',
     });
 
     try {
-      // First, sync to get the latest data
-      console.log('🔄 Syncing from Supabase before ending game...');
-      await syncFromSupabase();
-      console.log('✅ Sync completed, now checking court status...');
-
-      // Re-check court and team after sync
-      const court = state.courts.find((c) => c.id === courtId);
-      if (!court || !court.currentTeamId) {
-        console.log('⚠️ Court or team not found after sync');
-        setLoadingModal({ open: false, title: '', status: 'loading' });
-        toast.error('게임 종료 실패', {
-          description: '코트 정보를 찾을 수 없습니다.',
-        });
-        return;
-      }
-
-      const team = state.teams.find((t) => t.id === court.currentTeamId);
-      if (!team) {
-        console.log('⚠️ Team not found after sync');
-        setLoadingModal({ open: false, title: '', status: 'loading' });
-        toast.error('게임 종료 실패', {
-          description: '팀 정보를 찾을 수 없습니다.',
-        });
-        return;
-      }
-
-      // Update loading modal
-      setLoadingModal({
-        open: true,
-        title: '게임 종료 중',
-        description: '게임을 종료하고 참가자들을 대기 상태로 전환하고 있습니다...',
-        status: 'loading',
-      });
-
-      console.log('📤 Calling endGame...');
+      // Skip sync before ending game - rely on periodic sync (every 1 minute)
+      // This reduces processing time by ~300-500ms
+      console.log('📤 Calling endGame directly (no pre-sync needed)...');
       await endGame(courtId);
       console.log('✅ endGame completed');
       
@@ -644,11 +632,31 @@ export default function App() {
         onSelectRole={setUserRole} 
         onLoginSuccess={async () => {
           console.log('🔐 Login successful, syncing from Supabase...');
+          
+          // Show loading modal during initial sync
+          setLoadingModal({
+            open: true,
+            title: '데이터 로딩 중',
+            description: '최신 데이터를 가져오고 있습니다...',
+            status: 'loading',
+          });
+          
           try {
             await syncFromSupabase();
             console.log('✅ Sync completed after login');
+            
+            // Close modal without toast (silent sync)
+            setLoadingModal(prev => ({ ...prev, open: false }));
           } catch (error) {
             console.error('⚠️ Sync failed after login:', error);
+            
+            // Show error modal
+            setLoadingModal({
+              open: true,
+              title: '데이터 로딩 실패',
+              status: 'error',
+              errorMessage: '데이터를 가져오는 중 오류가 발생했습니다. 새로고침 버튼을 눌러 다시 시도해주세요.',
+            });
           }
         }} 
       />
