@@ -199,12 +199,14 @@ export function updatePriorityStatus(players: Player[]): Player[] {
   const minCount = Math.min(...gameCounts);
   
   return players.map((p) => {
+    // Don't auto-update resting, playing, or queued players
     if (p.state === 'resting' || p.state === 'playing' || p.state === 'queued') {
       return p;
     }
     
-    // Auto-set priority for players with minimum game count
-    if (p.gameCount === minCount && p.gameCount > 0) {
+    // Auto-set priority for players with minimum game count (and at least 1 game played)
+    // Only auto-promote waiting → priority, never auto-demote priority → waiting
+    if (p.state === 'waiting' && p.gameCount === minCount && p.gameCount > 0) {
       return { ...p, state: 'priority' as const };
     }
     

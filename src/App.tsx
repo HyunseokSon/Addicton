@@ -11,6 +11,7 @@ import { CourtCard } from './components/CourtCard';
 import { CourtSettingsDialog } from './components/CourtSettingsDialog';
 import { EndAllGamesConfirmDialog } from './components/EndAllGamesConfirmDialog';
 import { QueuedPlayersPanel } from './components/QueuedPlayersPanel';
+import { RestingPlayersPanel } from './components/RestingPlayersPanel';
 import { ManualTeamDialog } from './components/ManualTeamDialog';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -22,6 +23,7 @@ import { RoleSelection } from './components/RoleSelection';
 import { PasswordChangeDialog } from './components/PasswordChangeDialog';
 import { LoadingModal } from './components/LoadingModal';
 import { projectId, publicAnonKey } from './utils/supabase/info';
+import type { PlayerState } from './types/index';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -464,6 +466,20 @@ export default function App() {
     }
   };
 
+  const handleUpdatePlayerState = async (playerId: string, newState: PlayerState) => {
+    try {
+      await updatePlayerState([playerId], newState);
+      toast.success('상태 변경 완료', {
+        description: `참가자 상태가 변경되었습니다.`,
+      });
+    } catch (error) {
+      console.error('Update player state failed:', error);
+      toast.error('상태 변경 실패', {
+        description: '상태 변경 중 오류가 발생했습니다. 다시 시도해주세요.',
+      });
+    }
+  };
+
   const handleSwapBetweenTeams = (dragTeamId: string, dragPlayerId: string, dropTeamId: string, dropPlayerId: string) => {
     const dragTeam = state.teams.find((t) => t.id === dragTeamId);
     const dropTeam = state.teams.find((t) => t.id === dropTeamId);
@@ -880,9 +896,10 @@ export default function App() {
               {/* Player Panel */}
               <div>
                 <Tabs defaultValue="waiting" className="w-full">
-                  <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} mb-3`}>
-                    <TabsTrigger value="waiting" className="text-xs">대기 중</TabsTrigger>
+                  <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} mb-3`}>
+                    <TabsTrigger value="waiting" className="text-xs">대기중</TabsTrigger>
                     <TabsTrigger value="queued" className="text-xs">대기 팀</TabsTrigger>
+                    <TabsTrigger value="resting" className="text-xs">휴식중</TabsTrigger>
                     {isAdmin && <TabsTrigger value="management" className="text-xs">참가자 등록</TabsTrigger>}
                   </TabsList>
 
@@ -893,7 +910,7 @@ export default function App() {
                       onAddPlayer={addPlayer}
                       onUpdatePlayer={updatePlayer}
                       onDeletePlayer={deletePlayer}
-                      onUpdatePlayerState={updatePlayerState}
+                      onUpdatePlayerState={handleUpdatePlayerState}
                       onAdjustGameCount={adjustGameCount}
                       onReturnToWaiting={handleReturnToWaiting}
                       onRemoveAllWaiting={handleRemoveAllWaiting}
@@ -906,6 +923,16 @@ export default function App() {
                       players={state.players}
                       teams={state.teams}
                       onReturnToWaiting={handleReturnToWaiting}
+                      readOnly={!isAdmin}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="resting">
+                    <RestingPlayersPanel
+                      players={state.players}
+                      onUpdatePlayerState={handleUpdatePlayerState}
+                      onAdjustGameCount={adjustGameCount}
+                      onDeletePlayer={deletePlayer}
                       readOnly={!isAdmin}
                     />
                   </TabsContent>

@@ -432,14 +432,39 @@ export function useGameState() {
     }
   }, [addAuditLog]);
 
-  const updatePlayerState = useCallback((playerIds: string[], newState: PlayerState) => {
-    setState((prev) => ({
-      ...prev,
-      players: prev.players.map((p) =>
-        playerIds.includes(p.id) ? { ...p, state: newState } : p
-      ),
-    }));
-    addAuditLog('player_state_updated', { playerIds, newState });
+  const updatePlayerState = useCallback(async (playerIds: string[], newState: PlayerState) => {
+    try {
+      console.log(`📤 Updating ${playerIds.length} player(s) state to ${newState}...`);
+      
+      // Update Supabase FIRST using batch update
+      const playerUpdates = playerIds.map(playerId => ({
+        playerId,
+        updates: { state: newState }
+      }));
+      await playersApi.updateBatch(playerUpdates);
+      console.log(`✅ Updated ${playerIds.length} player(s) state in Supabase`);
+      
+      // Then update local state
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.map((p) =>
+          playerIds.includes(p.id) ? { ...p, state: newState } : p
+        ),
+      }));
+      
+      addAuditLog('player_state_updated', { playerIds, newState });
+    } catch (error) {
+      console.error('❌ Failed to update player state in Supabase:', error);
+      // Still update local state even if API fails
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.map((p) =>
+          playerIds.includes(p.id) ? { ...p, state: newState } : p
+        ),
+      }));
+      addAuditLog('player_state_updated', { playerIds, newState, error: String(error) });
+      throw error;
+    }
   }, [addAuditLog]);
 
   const performAutoMatch = useCallback(async () => {
