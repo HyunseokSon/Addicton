@@ -916,6 +916,22 @@ export default function App() {
           </div>
         )}
 
+        {/* Member Floating Refresh Button - Always visible on all screen sizes */}
+        {!isAdmin && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
+            <div className="pointer-events-auto max-w-md mx-auto">
+              <button
+                onClick={handleSyncFromSupabase}
+                disabled={isSyncing}
+                className="w-full bg-blue-600 text-white rounded-xl px-6 py-4 shadow-2xl hover:bg-blue-700 active:scale-95 font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`size-5 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? '새로고침 중...' : '🔄 새로고침'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <Toaster />
       </div>
     </DndProvider>
