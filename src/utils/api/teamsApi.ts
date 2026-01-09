@@ -10,6 +10,7 @@ export interface TeamData {
   assignedCourtId?: string | null;
   startedAt?: Date | null;
   endedAt?: Date | null;
+  createdAt?: Date;
 }
 
 export const teamsApi = {
@@ -37,6 +38,7 @@ export const teamsApi = {
       assignedCourtId: team.assigned_court_id || null,
       startedAt: team.started_at ? new Date(team.started_at) : null,
       endedAt: team.ended_at ? new Date(team.ended_at) : null,
+      createdAt: team.created_at ? new Date(team.created_at) : new Date(),
     }));
   },
 
@@ -51,6 +53,8 @@ export const teamsApi = {
       ended_at: team.endedAt?.toISOString() || null,
     };
     
+    console.log('📤 Sending team to API:', dbTeam);
+    
     const response = await fetch(`${API_BASE}/teams`, {
       method: 'POST',
       headers: {
@@ -61,6 +65,8 @@ export const teamsApi = {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API error response:', errorText);
       throw new Error(`Failed to add team: ${response.statusText}`);
     }
   },

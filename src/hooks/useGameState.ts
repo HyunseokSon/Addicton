@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { AppState, Player, Team, Court, Session, PlayerState, AuditLog, Member, Gender, Rank } from '../types';
 import { autoMatch, updatePriorityStatus } from '../utils/matching';
 import { createInitialMembers } from '../data/initialMembers';
@@ -81,7 +82,48 @@ export function useGameState() {
         
         // Load teams
         const teamsFromDb = await teamsApi.getAll();
-        const activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
+        let activeTeams = teamsFromDb.filter(t => t.state === 'queued' || t.state === 'playing');
+        
+        // 🧹 DATA CLEANUP: Fix teams that exceed court capacity
+        const playingTeams = activeTeams.filter(t => t.state === 'playing');
+        if (playingTeams.length > courtsCount) {
+          console.log(`🧹 CLEANUP: Found ${playingTeams.length} playing teams but only ${courtsCount} courts - fixing...`);
+          
+          // Keep only the first N teams (by createdAt), move rest back to queued
+          const sortedPlayingTeams = [...playingTeams].sort((a, b) => 
+            (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)
+          );
+          const teamsToKeepPlaying = sortedPlayingTeams.slice(0, courtsCount);
+          const teamsToMoveToQueued = sortedPlayingTeams.slice(courtsCount);
+          
+          console.log(`   Keeping ${teamsToKeepPlaying.length} playing teams, moving ${teamsToMoveToQueued.length} back to queued`);
+          
+          // Update teams to queued in Supabase
+          for (const team of teamsToMoveToQueued) {
+            await teamsApi.update(team.id, {
+              state: 'queued',
+              assignedCourtId: null,
+              startedAt: null,
+            });
+            console.log(`   ✅ Moved team ${team.name} back to queued`);
+            
+            // Update players back to queued
+            const playerUpdates = team.playerIds.map(playerId => ({
+              playerId,
+              updates: { state: 'queued' as const }
+            }));
+            await playersApi.updateBatch(playerUpdates);
+          }
+          
+          // Refresh active teams
+          activeTeams = [
+            ...teamsToKeepPlaying,
+            ...teamsToMoveToQueued.map(t => ({ ...t, state: 'queued' as const, assignedCourtId: null })),
+            ...activeTeams.filter(t => t.state === 'queued')
+          ];
+          
+          console.log(`✅ CLEANUP complete: ${teamsToKeepPlaying.length} playing, ${activeTeams.filter(t => t.state === 'queued').length} queued`);
+        }
         
         setState((prev) => {
           // Create courts array based on loaded courtsCount
@@ -499,32 +541,87 @@ export function useGameState() {
     }
   }, [addAuditLog, state]);
 
-  const startGame = useCallback(async (teamId: string, courtId?: string) => {
+  const startGame = useCallback(async (teamId: string, courtId?: string): Promise<{ success: boolean; reason?: string }> => {
+    console.log(`🎮 startGame called for teamId: ${teamId}, courtId: ${courtId || 'auto'}`);
+    
     try {
       let playersToUpdate: string[] = [];
+      let targetCourtId: string | null = null;
+      let gameStarted = false;
+      let failureReason: string | undefined = undefined;
       
+      // Update local state - with DOUBLE CHECK inside setState
       setState((prev) => {
+        // RE-CHECK inside setState with LATEST state
         const team = prev.teams.find((t) => t.id === teamId);
-        if (!team) return prev;
+        if (!team) {
+          console.log('⚠️ Team not found:', teamId);
+          failureReason = 'team_not_found';
+          return prev;
+        }
         
-        // Find available court
-        let targetCourt = courtId
-          ? prev.courts.find((c) => c.id === courtId)
+        // Check if team is already playing
+        if (team.state === 'playing') {
+          console.log('⚠️ Team is already playing:', teamId);
+          failureReason = 'team_already_playing';
+          return prev;
+        }
+        
+        // ⭐ NEW: Check if any player in the team is currently playing
+        const playingPlayers = team.playerIds.filter(playerId => {
+          const player = prev.players.find(p => p.id === playerId);
+          return player && player.state === 'playing';
+        });
+        
+        if (playingPlayers.length > 0) {
+          const playingPlayerNames = playingPlayers
+            .map(playerId => prev.players.find(p => p.id === playerId)?.name)
+            .filter(Boolean)
+            .join(', ');
+          console.log(`⚠️ Cannot start: ${playingPlayers.length} player(s) in this team are already playing: ${playingPlayerNames}`);
+          failureReason = `duplicate_players:${playingPlayerNames}`;
+          return prev; // NO STATE CHANGE
+        }
+        
+        // Count current playing teams
+        const playingTeamsCount = prev.teams.filter(t => t.state === 'playing').length;
+        const totalCourts = prev.session?.courtsCount || 0;
+        
+        // CRITICAL CHECK: Don't exceed court capacity
+        if (playingTeamsCount >= totalCourts) {
+          console.log(`⚠️ Court capacity reached: ${playingTeamsCount}/${totalCourts} courts occupied`);
+          failureReason = 'no_available_courts';
+          return prev; // NO STATE CHANGE
+        }
+        
+        // Find available court using LATEST state
+        const targetCourt = courtId
+          ? prev.courts.find((c) => c.id === courtId && c.status === 'available')
           : prev.courts.find((c) => c.status === 'available');
         
-        if (!targetCourt || !prev.session) return prev;
+        if (!targetCourt || !prev.session) {
+          console.log('⚠️ No available court to start game');
+          console.log('   Available courts:', prev.courts.filter(c => c.status === 'available').map(c => c.name).join(', ') || 'none');
+          failureReason = 'no_available_courts';
+          return prev; // NO STATE CHANGE
+        }
         
-        // Store player IDs to update in Supabase
+        console.log(`✅ Court available: ${targetCourt.name} (${targetCourt.id}), starting game... (${playingTeamsCount + 1}/${totalCourts})`);
+        
+        // Store for Supabase update
         playersToUpdate = team.playerIds;
+        targetCourtId = targetCourt.id;
+        gameStarted = true;
         
+        // Update state
         const updatedTeams = prev.teams.map((t) =>
           t.id === teamId
-            ? { ...t, state: 'playing' as const, assignedCourtId: targetCourt!.id, startedAt: new Date() }
+            ? { ...t, state: 'playing' as const, assignedCourtId: targetCourt.id, startedAt: new Date() }
             : t
         );
         
         const updatedCourts = prev.courts.map((c) =>
-          c.id === targetCourt!.id
+          c.id === targetCourt.id
             ? { ...c, status: 'occupied' as const, currentTeamId: teamId, timerMs: 0 }
             : c
         );
@@ -541,22 +638,23 @@ export function useGameState() {
         };
       });
       
-      // Update team state in Supabase
-      const targetCourt = courtId || state.courts.find((c) => c.status === 'available')?.id;
-      if (targetCourt) {
-        await teamsApi.update(teamId, {
-          state: 'playing',
-          assignedCourtId: targetCourt,
-          startedAt: new Date(),
-        });
-        console.log(`✅ Updated team ${teamId} to playing with courtId ${targetCourt} in Supabase`);
-      } else {
-        await teamsApi.update(teamId, {
-          state: 'playing',
-          startedAt: new Date(),
-        });
-        console.log(`✅ Updated team ${teamId} to playing (no court assigned) in Supabase`);
+      console.log(`🔍 After setState: gameStarted = ${gameStarted}, targetCourtId = ${targetCourtId}, failureReason = ${failureReason}`);
+      
+      // If game didn't start, return early WITHOUT Supabase update
+      if (!gameStarted || !targetCourtId) {
+        console.log('❌ Game NOT started - returning false');
+        return { success: false, reason: failureReason };
       }
+      
+      console.log(`✅ Local state updated, now updating Supabase...`);
+      
+      // Update team state in Supabase
+      await teamsApi.update(teamId, {
+        state: 'playing',
+        assignedCourtId: targetCourtId,
+        startedAt: new Date(),
+      });
+      console.log(`✅ Updated team ${teamId} to playing with courtId ${targetCourtId} in Supabase`);
       
       // Batch update player states to 'playing' in Supabase
       if (playersToUpdate.length > 0) {
@@ -570,48 +668,102 @@ export function useGameState() {
       }
       
       addAuditLog('game_started', { teamId, courtId });
+      return { success: true };
     } catch (error) {
-      console.error('Failed to update team in Supabase:', error);
-      addAuditLog('game_started', { teamId, courtId });
+      console.error('❌ Failed to start game:', error);
+      addAuditLog('game_started', { teamId, courtId, error: String(error) });
+      return { success: false, reason: 'error' };
     }
-  }, [addAuditLog, state.courts]);
+  }, [addAuditLog]);
 
   const startAllQueuedGames = useCallback(async () => {
     console.log('🎮 startAllQueuedGames called');
     
-    // Get current state to determine what needs to be updated
-    const queuedTeams = state.teams.filter((t) => t.state === 'queued');
-    const availableCourts = state.courts.filter((c) => c.status === 'available');
-    
-    console.log(`Found ${queuedTeams.length} queued teams and ${availableCourts.length} available courts`);
-    
-    if (queuedTeams.length === 0 || availableCourts.length === 0) {
-      console.log('No teams or courts available, returning');
-      return 0;
-    }
-    
-    // Match teams to courts
-    const teamsToStart = queuedTeams.slice(0, availableCourts.length);
-    const teamsToUpdate: { teamId: string; courtId: string }[] = [];
-    const playersToUpdate: string[] = [];
-    
-    teamsToStart.forEach((team, index) => {
-      const court = availableCourts[index];
-      teamsToUpdate.push({ teamId: team.id, courtId: court.id });
-      playersToUpdate.push(...team.playerIds);
-    });
-    
-    console.log(`Prepared to start ${teamsToUpdate.length} teams`);
+    let startedCount = 0;
+    const updatesRef = { 
+      teams: [] as { teamId: string; courtId: string }[], 
+      players: [] as string[] 
+    };
     
     try {
-      // Update local state first
-      setState((prev) => {
+      // ⭐ Use flushSync to force synchronous setState execution
+      flushSync(() => {
+        setState((prev) => {
+        // Get queued teams from LATEST state
+        const allQueuedTeams = prev.teams
+          .filter((t) => t.state === 'queued')
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        
+        // ⭐ Filter out teams with playing players
+        const queuedTeams = allQueuedTeams.filter(team => {
+          const hasPlayingPlayer = team.playerIds.some(playerId => {
+            const player = prev.players.find(p => p.id === playerId);
+            return player && player.state === 'playing';
+          });
+          
+          if (hasPlayingPlayer) {
+            console.log(`⚠️ Skipping team ${team.id}: contains playing player(s)`);
+          }
+          
+          return !hasPlayingPlayer;
+        });
+        
+        // Count current playing teams
+        const playingTeamsCount = prev.teams.filter(t => t.state === 'playing').length;
+        const totalCourts = prev.session?.courtsCount || 0;
+        const availableSlotsCount = totalCourts - playingTeamsCount;
+        
+        // Get available courts
+        const availableCourts = prev.courts.filter((c) => c.status === 'available');
+        
+        console.log(`📊 Status: ${allQueuedTeams.length} total queued (${queuedTeams.length} startable), ${playingTeamsCount} playing, ${availableCourts.length} available courts, ${availableSlotsCount} free slots (max: ${totalCourts})`);
+        
+        // CRITICAL CHECK: Don't exceed court capacity
+        if (availableSlotsCount <= 0 || availableCourts.length === 0) {
+          console.log(`⚠️ Cannot start: No available slots or courts (${playingTeamsCount}/${totalCourts} occupied)`);
+          return prev; // NO STATE CHANGE
+        }
+        
+        // If no queued teams, return immediately
+        if (queuedTeams.length === 0) {
+          console.log('⚠️ Cannot start: No startable queued teams');
+          return prev; // NO STATE CHANGE
+        }
+        
+        // IMPORTANT: Only start as many teams as we have BOTH available courts AND available slots
+        const maxTeamsToStart = Math.min(queuedTeams.length, availableCourts.length, availableSlotsCount);
+        
         let updatedTeams = [...prev.teams];
         let updatedCourts = [...prev.courts];
         let updatedPlayers = [...prev.players];
         
-        teamsToStart.forEach((team, index) => {
-          const court = availableCourts[index];
+        // Track players who are starting in THIS batch
+        const startingPlayerIds = new Set<string>();
+        const teamsActuallyStarted: typeof queuedTeams = [];
+        
+        // Try to start teams one by one, checking for player conflicts
+        for (let i = 0; i < maxTeamsToStart; i++) {
+          const team = queuedTeams[i];
+          const court = availableCourts[i];
+          
+          // Check if any player in this team is already starting in THIS batch
+          const hasConflict = team.playerIds.some(playerId => startingPlayerIds.has(playerId));
+          
+          if (hasConflict) {
+            const conflictingPlayers = team.playerIds
+              .filter(playerId => startingPlayerIds.has(playerId))
+              .map(playerId => prev.players.find(p => p.id === playerId)?.name || playerId);
+            console.log(`⚠️ Skipping team ${team.name || team.id}: player(s) already in another starting game: ${conflictingPlayers.join(', ')}`);
+            continue; // Skip this team
+          }
+          
+          // No conflict - add this team's players to the starting set
+          team.playerIds.forEach(playerId => startingPlayerIds.add(playerId));
+          teamsActuallyStarted.push(team);
+          
+          // Store for Supabase update
+          updatesRef.teams.push({ teamId: team.id, courtId: court.id });
+          updatesRef.players.push(...team.playerIds);
           
           // Update team
           updatedTeams = updatedTeams.map((t) =>
@@ -631,7 +783,10 @@ export function useGameState() {
           updatedPlayers = updatedPlayers.map((p) =>
             team.playerIds.includes(p.id) ? { ...p, state: 'playing' as const } : p
           );
-        });
+        }
+        
+        startedCount = teamsActuallyStarted.length; // Set count AFTER filtering
+        console.log(`✅ Will start ${startedCount} teams (after conflict check)`);
         
         return {
           ...prev,
@@ -639,15 +794,24 @@ export function useGameState() {
           courts: updatedCourts,
           players: updatedPlayers,
         };
+        });
       });
       
-      console.log('✅ Local state updated');
+      console.log(`🔍 After setState: startedCount=${startedCount}, updatesRef.teams.length=${updatesRef.teams.length}`);
+      
+      // If no teams were started, return early
+      if (startedCount === 0) {
+        console.log('❌ No teams started - returning 0');
+        return 0;
+      }
+      
+      console.log(`✅ Local state updated, now updating ${updatesRef.teams.length} teams in Supabase...`);
       
       // Batch update teams in Supabase
-      if (teamsToUpdate.length > 0) {
-        console.log(`🔄 Updating ${teamsToUpdate.length} teams in Supabase...`);
+      if (updatesRef.teams.length > 0) {
+        console.log(`🔄 Batch updating ${updatesRef.teams.length} teams...`);
         await Promise.all(
-          teamsToUpdate.map(({ teamId, courtId }) =>
+          updatesRef.teams.map(({ teamId, courtId }) =>
             teamsApi.update(teamId, {
               state: 'playing',
               assignedCourtId: courtId,
@@ -655,12 +819,13 @@ export function useGameState() {
             })
           )
         );
-        console.log(`✅ Batch started ${teamsToUpdate.length} teams in Supabase`);
+        console.log(`✅ Batch updated ${updatesRef.teams.length} teams in Supabase`);
       }
       
       // Batch update players in Supabase
-      if (playersToUpdate.length > 0) {
-        const uniquePlayerIds = [...new Set(playersToUpdate)];
+      if (updatesRef.players.length > 0) {
+        const uniquePlayerIds = [...new Set(updatesRef.players)];
+        console.log(`🔄 Batch updating ${uniquePlayerIds.length} unique players...`);
         await Promise.all(
           uniquePlayerIds.map((playerId) =>
             playersApi.update(playerId, { state: 'playing' })
@@ -669,13 +834,14 @@ export function useGameState() {
         console.log(`✅ Updated ${uniquePlayerIds.length} players to playing state in Supabase`);
       }
       
-      addAuditLog('batch_games_started', { count: teamsToUpdate.length });
-      return teamsToUpdate.length;
+      addAuditLog('batch_games_started', { count: startedCount });
+      console.log(`✅ Batch start complete: returning ${startedCount}`);
+      return startedCount;
     } catch (error) {
-      console.error('Failed to batch start games:', error);
+      console.error('❌ Failed to batch start games:', error);
       return 0;
     }
-  }, [addAuditLog, state.teams, state.courts]);
+  }, [addAuditLog]);
 
   const endGame = useCallback(async (courtId: string) => {
     console.log('🎮 endGame called for courtId:', courtId);
@@ -711,10 +877,22 @@ export function useGameState() {
             teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
           }
           
+          // ⭐ Check if player is in any other queued team
+          const otherQueuedTeams = state.teams.filter(t => 
+            t.id !== team.id && 
+            t.state === 'queued' && 
+            t.playerIds.includes(playerId)
+          );
+          
+          // If player is in other queued teams, keep them as 'queued', otherwise 'waiting'
+          const newState = otherQueuedTeams.length > 0 ? 'queued' : 'waiting';
+          
+          console.log(`📊 Player ${player.name}: other queued teams = ${otherQueuedTeams.length}, new state = ${newState}`);
+          
           playersToUpdate.push({
             id: playerId,
             updates: {
-              state: 'waiting',
+              state: newState,
               gameCount: player.gameCount + 1,
               lastGameEndAt: now,
               teammateHistory,
@@ -820,10 +998,21 @@ export function useGameState() {
             teammateHistory[teammateId] = (teammateHistory[teammateId] || 0) + 1;
           }
           
+          // ⭐ Check if player is in any other queued team (excluding teams being deleted)
+          const otherQueuedTeams = state.teams.filter(t => 
+            !allTeamsToDelete.includes(t.id) && 
+            t.id !== team.id && 
+            t.state === 'queued' && 
+            t.playerIds.includes(playerId)
+          );
+          
+          // If player is in other queued teams, keep them as 'queued', otherwise 'waiting'
+          const newState = otherQueuedTeams.length > 0 ? 'queued' : 'waiting';
+          
           allPlayersToUpdate.push({
             id: playerId,
             updates: {
-              state: 'waiting',
+              state: newState,
               gameCount: player.gameCount + 1,
               lastGameEndAt: now,
               teammateHistory,
@@ -984,16 +1173,31 @@ export function useGameState() {
 
   const deleteTeam = useCallback(async (teamId: string) => {
     try {
-      let playersToUpdate: string[] = [];
+      let playersToResetToWaiting: string[] = [];
       
       setState((prev) => {
         const team = prev.teams.find((t) => t.id === teamId);
         if (!team) return prev;
         
-        playersToUpdate = team.playerIds;
+        // ⭐ Only reset players to waiting if they are NOT in any other team
+        const otherTeams = prev.teams.filter(t => t.id !== teamId && (t.state === 'queued' || t.state === 'playing'));
+        const playersInOtherTeams = new Set(otherTeams.flatMap(t => t.playerIds));
+        
+        // Find players who should be reset to waiting (only queued players not in other teams)
+        playersToResetToWaiting = team.playerIds.filter(playerId => {
+          const player = prev.players.find(p => p.id === playerId);
+          // Only reset if player is queued AND not in another team
+          return player && player.state === 'queued' && !playersInOtherTeams.has(playerId);
+        });
+        
+        console.log(`🗑️ Deleting team ${teamId}:`, {
+          totalPlayers: team.playerIds.length,
+          playersToReset: playersToResetToWaiting.length,
+          playersInOtherTeams: team.playerIds.filter(id => playersInOtherTeams.has(id)).length
+        });
         
         const updatedPlayers = prev.players.map((p) =>
-          team.playerIds.includes(p.id) ? { ...p, state: 'waiting' as const } : p
+          playersToResetToWaiting.includes(p.id) ? { ...p, state: 'waiting' as const } : p
         );
         
         return {
@@ -1006,14 +1210,18 @@ export function useGameState() {
       // Delete team from Supabase
       await teamsApi.delete(teamId);
       
-      // Update all affected players in Supabase
-      await Promise.all(
-        playersToUpdate.map(playerId => 
-          playersApi.update(playerId, { state: 'waiting' })
-        )
-      );
+      // Update only the players that need to be reset to waiting
+      if (playersToResetToWaiting.length > 0) {
+        console.log(`📤 Resetting ${playersToResetToWaiting.length} players to waiting state...`);
+        const playerUpdates = playersToResetToWaiting.map(playerId => ({
+          playerId,
+          updates: { state: 'waiting' as const }
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Reset ${playersToResetToWaiting.length} players to waiting state`);
+      }
       
-      console.log(`✅ Deleted team ${teamId} and updated ${playersToUpdate.length} players in Supabase`);
+      console.log(`✅ Deleted team ${teamId} from Supabase`);
       addAuditLog('team_deleted', { teamId });
     } catch (error) {
       console.error('Failed to delete team from Supabase:', error);
@@ -1022,8 +1230,16 @@ export function useGameState() {
         const team = prev.teams.find((t) => t.id === teamId);
         if (!team) return prev;
         
+        const otherTeams = prev.teams.filter(t => t.id !== teamId && (t.state === 'queued' || t.state === 'playing'));
+        const playersInOtherTeams = new Set(otherTeams.flatMap(t => t.playerIds));
+        
+        const playersToResetToWaiting = team.playerIds.filter(playerId => {
+          const player = prev.players.find(p => p.id === playerId);
+          return player && player.state === 'queued' && !playersInOtherTeams.has(playerId);
+        });
+        
         const updatedPlayers = prev.players.map((p) =>
-          team.playerIds.includes(p.id) ? { ...p, state: 'waiting' as const } : p
+          playersToResetToWaiting.includes(p.id) ? { ...p, state: 'waiting' as const } : p
         );
         
         return {
@@ -1061,6 +1277,92 @@ export function useGameState() {
       addAuditLog('team_updated', { teamId, playerIds });
     }
   }, [addAuditLog]);
+
+  const createManualTeam = useCallback(async (playerIds: string[]) => {
+    console.log('🎮 createManualTeam called with playerIds:', playerIds);
+    
+    // Validate team size
+    if (!state.session) {
+      throw new Error('No session found');
+    }
+    
+    if (playerIds.length !== state.session.teamSize) {
+      throw new Error(`팀은 정확히 ${state.session.teamSize}명이어야 합니다.`);
+    }
+    
+    // Check if all players exist
+    const players = state.players.filter(p => playerIds.includes(p.id));
+    if (players.length !== playerIds.length) {
+      throw new Error('선택한 플레이어 중 일부를 찾을 수 없습니다.');
+    }
+    
+    // Debug: Check gender information
+    console.log('🔍 Selected players with gender info:', players.map(p => ({
+      id: p.id,
+      name: p.name,
+      gender: p.gender,
+      rank: p.rank,
+      state: p.state
+    })));
+    
+    try {
+      // Calculate next team number
+      const existingTeamCount = state.teams.filter(t => t.state === 'queued' || t.state === 'playing').length;
+      
+      // Create new team
+      const newTeam: Team = {
+        id: `team-${Date.now()}-${Math.random()}`,
+        name: `수동 팀 ${existingTeamCount + 1}`,
+        playerIds,
+        state: 'queued',
+        assignedCourtId: null,
+        startedAt: null,
+        endedAt: null,
+        createdAt: new Date(),
+      };
+      
+      console.log('📤 Saving manual team to Supabase...');
+      await teamsApi.add(newTeam);
+      console.log('✅ Saved manual team to Supabase');
+      
+      // Update player states to 'queued' (only for waiting players)
+      const waitingPlayerIds = players.filter(p => p.state === 'waiting').map(p => p.id);
+      
+      if (waitingPlayerIds.length > 0) {
+        console.log(`📤 Updating ${waitingPlayerIds.length} waiting players to queued state...`);
+        const playerUpdates = waitingPlayerIds.map(playerId => ({
+          playerId,
+          updates: { state: 'queued' as const }
+        }));
+        await playersApi.updateBatch(playerUpdates);
+        console.log(`✅ Updated ${waitingPlayerIds.length} players to queued state`);
+      }
+      
+      // Update local state
+      setState((prev) => {
+        const updatedPlayers = prev.players.map(p => {
+          if (waitingPlayerIds.includes(p.id)) {
+            return { ...p, state: 'queued' as const };
+          }
+          return p;
+        });
+        
+        return {
+          ...prev,
+          teams: [...prev.teams, newTeam],
+          players: updatedPlayers,
+        };
+      });
+      
+      addAuditLog('manual_team_created', { playerIds });
+      console.log('✅ Manual team created successfully');
+      
+      return newTeam;
+    } catch (error) {
+      console.error('❌ Failed to create manual team:', error);
+      throw error;
+    }
+  }, [addAuditLog, state.session, state.players]);
 
   const resetSession = useCallback(async () => {
     console.log('🔄 Starting session reset...');
@@ -1513,6 +1815,7 @@ export function useGameState() {
     adjustGameCount,
     deleteTeam,
     updateTeam,
+    createManualTeam,
     resetSession,
     addMember,
     updateMember,

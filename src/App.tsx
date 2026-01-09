@@ -11,6 +11,7 @@ import { CourtCard } from './components/CourtCard';
 import { CourtSettingsDialog } from './components/CourtSettingsDialog';
 import { EndAllGamesConfirmDialog } from './components/EndAllGamesConfirmDialog';
 import { QueuedPlayersPanel } from './components/QueuedPlayersPanel';
+import { ManualTeamDialog } from './components/ManualTeamDialog';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -37,6 +38,7 @@ export default function App() {
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showCourtSettings, setShowCourtSettings] = useState(false);
   const [showEndAllGamesDialog, setShowEndAllGamesDialog] = useState(false);
+  const [showManualTeamDialog, setShowManualTeamDialog] = useState(false);
   const [loadingModal, setLoadingModal] = useState<{
     open: boolean;
     title: string;
@@ -68,6 +70,7 @@ export default function App() {
     adjustGameCount,
     deleteTeam,
     updateTeam,
+    createManualTeam,
     resetSession,
     addMember,
     updateMember,
@@ -211,7 +214,8 @@ export default function App() {
     }
   };
 
-  const handleStartGame = (teamId: string, courtId?: string) => {
+  const handleStartGame = async (teamId: string, courtId?: string) => {
+    // Pre-check for available courts
     const availableCourt = state.courts.find((c) => c.status === 'available');
     if (!availableCourt && !courtId) {
       toast.error('코트 부족', {
@@ -220,15 +224,42 @@ export default function App() {
       return;
     }
 
-    startGame(teamId, courtId);
-    toast.success('게임 시작', {
-      description: '타이머가 시작되었습니다.',
-    });
+    // Call startGame - it will handle all validation and state updates
+    const result = await startGame(teamId, courtId);
+    
+    // Show success message only if game actually started
+    if (result.success) {
+      toast.success('게임 시작', {
+        description: '타이머가 시작되었습니다.',
+      });
+    } else {
+      // Show specific error message based on failure reason
+      if (result.reason?.startsWith('duplicate_players:')) {
+        const playerNames = result.reason.split(':')[1];
+        toast.error('게임 시작 실패', {
+          description: `이미 게임 중인 참가자가 포함되어 있습니다: ${playerNames}`,
+        });
+      } else if (result.reason === 'no_available_courts') {
+        toast.error('게임 시작 실패', {
+          description: '사용 가능한 코트가 없습니다.',
+        });
+      } else if (result.reason === 'team_already_playing') {
+        toast.error('게임 시작 실패', {
+          description: '이미 게임이 진행 중인 팀입니다.',
+        });
+      } else {
+        toast.error('게임 시작 실패', {
+          description: '게임을 시작할 수 없습니다.',
+        });
+      }
+    }
   };
 
   const handleStartAllQueuedGames = async () => {
     const availableCourts = state.courts.filter((c) => c.status === 'available');
-    const queuedTeams = state.teams.filter((t) => t.state === 'queued');
+    const queuedTeams = state.teams
+      .filter((t) => t.state === 'queued')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()); // Sort by priority (oldest first)
     
     if (availableCourts.length === 0) {
       toast.error('코트 부족', {
@@ -243,18 +274,33 @@ export default function App() {
     setLoadingModal({
       open: true,
       title: '게임 일괄 시작 중',
-      description: `${teamsToStart}개 팀의 게임을 시작하고 있습니다...`,
+      description: `최대 ${teamsToStart}개 팀의 게임을 시작하고 있습니다...`,
       status: 'loading',
     });
 
     try {
-      await startAllQueuedGames();
+      const startedCount = await startAllQueuedGames();
       
-      // Close modal and show success toast immediately
+      // Close modal and show appropriate message
       setLoadingModal(prev => ({ ...prev, open: false }));
-      toast.success('게임 시작 완료', {
-        description: `${teamsToStart}개 팀의 게임이 시작되었습니다.`,
-      });
+      
+      if (startedCount === 0) {
+        toast.warning('게임 시작 불가', {
+          description: '시작할 수 있는 팀이 없습니다.',
+        });
+      } else {
+        const skippedCount = queuedTeams.length - startedCount;
+        
+        if (skippedCount > 0) {
+          toast.success('게임 시작 완료', {
+            description: `${startedCount}개 팀의 게임이 시작되었습니다. ${skippedCount}개 팀은 중복 플레이어로 인해 건너뛰었습니다.`,
+          });
+        } else {
+          toast.success('게임 시작 완료', {
+            description: `${startedCount}개 팀의 게임이 시작되었습니다.`,
+          });
+        }
+      }
 
     } catch (error) {
       console.error('Start all games failed:', error);
@@ -381,8 +427,21 @@ export default function App() {
       // Update player states
       console.log(`📤 Updating ${waitingPlayer.name} to queued state...`);
       await updatePlayer(waitingPlayerId, { state: 'queued' });
-      console.log(`📤 Updating ${queuedPlayer.name} to waiting state...`);
-      await updatePlayer(queuedPlayerId, { state: 'waiting' });
+      
+      // ⭐ Check if queued player is in any other team before changing to waiting
+      const otherTeams = state.teams.filter(t => 
+        t.id !== teamId && 
+        (t.state === 'queued' || t.state === 'playing') && 
+        t.playerIds.includes(queuedPlayerId)
+      );
+      
+      if (otherTeams.length === 0) {
+        // Only update to waiting if not in other teams
+        console.log(`📤 Updating ${queuedPlayer.name} to waiting state...`);
+        await updatePlayer(queuedPlayerId, { state: 'waiting' });
+      } else {
+        console.log(`⚠️ ${queuedPlayer.name} is in ${otherTeams.length} other team(s), keeping queued state`);
+      }
       console.log('✅ Player states updated in Supabase')
       
       // Sync from Supabase to get the latest data
@@ -432,18 +491,48 @@ export default function App() {
     const newPlayerIds = team.playerIds.filter((id) => id !== playerId);
     
     if (newPlayerIds.length === 0) {
-      // If team is now empty, delete the team
+      // If team is now empty, delete the team (which handles player state properly)
       await deleteTeam(teamId);
     } else {
       await updateTeam(teamId, newPlayerIds);
+      
+      // ⭐ Only update player state if they are NOT in any other team
+      const otherTeams = state.teams.filter(t => t.id !== teamId && (t.state === 'queued' || t.state === 'playing'));
+      const isInOtherTeam = otherTeams.some(t => t.playerIds.includes(playerId));
+      
+      if (!isInOtherTeam) {
+        const player = state.players.find(p => p.id === playerId);
+        // Only update to waiting if player is currently queued (not playing)
+        if (player && player.state === 'queued') {
+          await updatePlayer(playerId, { state: 'waiting' });
+        }
+      }
     }
 
-    // Update player state to waiting
-    await updatePlayer(playerId, { state: 'waiting' });
-
     toast.success('대기 상태로 복귀', {
-      description: '참가자가 대기 상태로 변경되었습니다.',
+      description: '참가자가 팀에서 제거되었습니다.',
     });
+  };
+
+  const handleCreateManualTeam = async (playerIds: string[]) => {
+    try {
+      await createManualTeam(playerIds);
+      
+      const playerNames = playerIds
+        .map(id => state.players.find(p => p.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      
+      toast.success('수동 팀 생성 완료', {
+        description: `${playerNames} 팀이 생성되었습니다.`,
+      });
+    } catch (error) {
+      console.error('Manual team creation failed:', error);
+      toast.error('팀 생성 실패', {
+        description: error instanceof Error ? error.message : '팀 생성 중 오류가 발생했습니다.',
+      });
+      throw error;
+    }
   };
 
   const handleDeleteAllWaiting = async () => {
@@ -861,6 +950,7 @@ export default function App() {
                   onSwapBetweenTeams={handleSwapBetweenTeams}
                   onReturnToWaiting={handleReturnToWaiting}
                   onDeleteTeam={deleteTeam}
+                  onCreateManualTeam={() => setShowManualTeamDialog(true)}
                   isAdmin={isAdmin}
                 />
               </div>
@@ -891,6 +981,16 @@ export default function App() {
           onOpenChange={setShowEndAllGamesDialog}
           activeGamesCount={state.courts.filter(c => c.status === 'occupied').length}
           onConfirm={handleEndAllGames}
+        />
+
+        {/* Manual Team Dialog */}
+        <ManualTeamDialog
+          open={showManualTeamDialog}
+          onOpenChange={setShowManualTeamDialog}
+          players={state.players}
+          teams={state.teams}
+          teamSize={state.session?.teamSize || 4}
+          onCreateTeam={handleCreateManualTeam}
         />
 
         {/* Loading Modal */}

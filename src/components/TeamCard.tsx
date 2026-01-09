@@ -21,6 +21,9 @@ interface TeamCardProps {
 export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlayer, onSwapBetweenTeams, availableCourtCount, readOnly, isAdmin, onReturnToWaiting }: TeamCardProps) {
   const teamPlayers = players.filter((p) => team.playerIds.includes(p.id));
   
+  // Check if any player in the team is currently playing
+  const hasPlayingPlayer = teamPlayers.some(p => p.state === 'playing');
+  
   const handleSwap = (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => {
     if (onSwapPlayer) {
       onSwapPlayer(waitingPlayerId, teamId, queuedPlayerId);
@@ -28,21 +31,27 @@ export function TeamCard({ team, players, onStartGame, onDeleteTeam, onSwapPlaye
   };
 
   return (
-    <Card className="overflow-hidden border-2 shadow-md hover:shadow-lg transition-all">
+    <Card className={`overflow-hidden border-2 shadow-md hover:shadow-lg transition-all ${hasPlayingPlayer ? 'border-amber-400 bg-amber-50/30' : ''}`}>
       <CardContent className="p-3 md:p-4">
         {/* Team header */}
         <div className="flex items-center justify-between mb-3 md:mb-4 pb-2 md:pb-3 border-b">
           <div className="flex items-center gap-2">
-            <div className="size-2 rounded-full bg-orange-500 animate-pulse"></div>
+            <div className={`size-2 rounded-full ${hasPlayingPlayer ? 'bg-amber-500' : 'bg-orange-500'} animate-pulse`}></div>
             <span className="font-semibold text-sm md:text-base">{team.name}</span>
+            {hasPlayingPlayer && (
+              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-300">
+                게임중 포함
+              </Badge>
+            )}
           </div>
           <div className="flex gap-1.5 md:gap-2">
             {!readOnly && isAdmin && team.state === 'queued' && onStartGame && (
               <Button 
                 size="sm" 
                 onClick={onStartGame} 
-                disabled={availableCourtCount === 0}
-                className="h-8 md:h-9 px-3 md:px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md active:scale-95 transition-all text-[10px] md:text-xs touch-manipulation"
+                disabled={availableCourtCount === 0 || hasPlayingPlayer}
+                className="h-8 md:h-9 px-3 md:px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md active:scale-95 transition-all text-[10px] md:text-xs touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                title={hasPlayingPlayer ? '게임 중인 플레이어가 포함되어 있어 시작할 수 없습니다' : ''}
               >
                 <Play className="size-3 md:size-3.5 mr-1 md:mr-1.5" />
                 게임 시작

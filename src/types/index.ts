@@ -31,6 +31,7 @@ export interface Team {
   assignedCourtId: string | null;
   startedAt: Date | null;
   endedAt: Date | null;
+  createdAt: Date;
 }
 
 export interface Court {

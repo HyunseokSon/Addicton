@@ -370,8 +370,17 @@ app.post("/make-server-41b22d2d/teams", async (c) => {
   try {
     const team = await c.req.json();
     
-    if (!team || !team.id || !team.player_ids) {
-      return c.json({ error: "Invalid team data" }, 400);
+    console.log("📥 Received team data:", JSON.stringify(team, null, 2));
+    
+    if (!team || !team.id || !team.player_ids || !team.name) {
+      console.error("❌ Validation failed:", { 
+        hasTeam: !!team, 
+        hasId: !!team?.id, 
+        hasPlayerIds: !!team?.player_ids,
+        hasName: !!team?.name,
+        team 
+      });
+      return c.json({ error: "Invalid team data - missing required fields (id, player_ids, or name)" }, 400);
     }
 
     const addedTeam = await db.addTeam(team);

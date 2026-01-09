@@ -1,6 +1,6 @@
 import { Team, Court, Player } from '../types/index';
 import { TeamCard } from './TeamCard';
-import { Play, Users, X, PlayCircle, Zap } from 'lucide-react';
+import { Play, Users, X, PlayCircle, Zap, UserPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -13,6 +13,7 @@ interface MatchingAreaProps {
   onSwapPlayer?: (waitingPlayerId: string, teamId: string, queuedPlayerId: string) => void;
   onSwapBetweenTeams: (dragTeamId: string, dragPlayerId: string, dropTeamId: string, dropPlayerId: string) => void;
   onReturnToWaiting: (playerId: string, teamId: string) => void;
+  onCreateManualTeam?: () => void;
   isAdmin?: boolean;
 }
 
@@ -25,14 +26,29 @@ export function MatchingArea({
   onSwapPlayer,
   onSwapBetweenTeams,
   onReturnToWaiting,
+  onCreateManualTeam,
   isAdmin,
 }: MatchingAreaProps) {
   const queuedTeams = teams || [];
 
   return (
     <div className="space-y-4">
-      {/* Batch Start Button - Desktop Only */}
-      {queuedTeams.length > 0 && isAdmin && (
+      {/* Action Buttons Container */}
+      <div className="flex flex-col gap-3">
+        {/* Manual Team Creation Button */}
+        {isAdmin && onCreateManualTeam && (
+          <Button
+            onClick={onCreateManualTeam}
+            variant="outline"
+            className="w-full h-12 border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5"
+          >
+            <UserPlus className="size-5 mr-2" />
+            <span className="font-semibold">수동 팀 생성</span>
+          </Button>
+        )}
+
+        {/* Batch Start Button - Desktop Only */}
+        {queuedTeams.length > 0 && isAdmin && (
         <div className="relative hidden md:block">
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-xl blur opacity-20 animate-pulse"></div>
           <Button
@@ -55,7 +71,8 @@ export function MatchingArea({
             </div>
           </Button>
         </div>
-      )}
+        )}
+      </div>
 
       {queuedTeams.length === 0 ? (
         <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border-2 border-dashed border-orange-200 p-8 text-center">

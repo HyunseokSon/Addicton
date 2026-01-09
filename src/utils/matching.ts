@@ -113,6 +113,7 @@ export function autoMatch(
     assignedCourtId: null,
     startedAt: null,
     endedAt: null,
+    createdAt: new Date(),
   }));
 
   return {
