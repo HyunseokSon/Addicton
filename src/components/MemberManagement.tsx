@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
-import { UserPlus, Edit2, Trash2, Check, X, UserCheck, CheckCircle2, Search, Filter, Users, Database } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Check, X, UserCheck, CheckCircle2, Search, Filter, Users } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -228,57 +228,6 @@ export function MemberManagement({
     }
   };
 
-  const handleMigrateGender = async () => {
-    if (!confirm('DB의 성별 데이터를 한글로 변환하시겠습니까?\n\nmale → 남\nfemale → 녀')) {
-      return;
-    }
-
-    // Show loading modal
-    setLoadingModal({
-      open: true,
-      title: '성별 데이터 변환 중',
-      description: '모임원과 참가자의 성별 데이터를 변환하고 있습니다...',
-      status: 'loading',
-    });
-
-    try {
-      const { membersUpdated, playersUpdated } = await membersApi.migrateGender();
-      
-      // Update loading modal with sync message
-      setLoadingModal({
-        open: true,
-        title: '성별 데이터 변환 중',
-        description: `모임원 ${membersUpdated}명, 참가자 ${playersUpdated}명이 업데이트되었습니다. 데이터를 새로고침합니다...`,
-        status: 'loading',
-      });
-
-      // Auto sync to reflect changes
-      await syncFromSupabase();
-
-      // Show success
-      setLoadingModal({
-        open: true,
-        title: '변환 완료',
-        description: `성별 데이터가 한글로 변환되었습니다.\n모임원: ${membersUpdated}명, 참가자: ${playersUpdated}명`,
-        status: 'success',
-      });
-
-      // Auto close after 2 seconds
-      setTimeout(() => {
-        setLoadingModal(prev => ({ ...prev, open: false }));
-      }, 2000);
-
-    } catch (error) {
-      console.error('Gender migration failed:', error);
-      setLoadingModal({
-        open: true,
-        title: '변환 실패',
-        status: 'error',
-        errorMessage: '변환 중 오류가 발생했습니다. 다시 시도해주세요.',
-      });
-    }
-  };
-
   return (
     <div className="space-y-4 md:space-y-5">
       {/* Members List */}
@@ -475,7 +424,7 @@ const MemberCard = React.memo(function MemberCard({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="남">남</SelectItem>
-                <SelectItem value="녀">녀</SelectItem>
+                <SelectItem value="여">여</SelectItem>
               </SelectContent>
             </Select>
             <Select

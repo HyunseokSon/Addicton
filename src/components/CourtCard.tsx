@@ -99,6 +99,10 @@ export function CourtCard({
                       {player.rank}
                     </Badge>
                   )}
+                  {/* Game Count Badge */}
+                  <Badge variant="outline" className="text-[9px] md:text-xs px-1 md:px-1.5 py-0 h-4 md:h-5 bg-blue-50 border-blue-300 text-blue-700">
+                    {player.gameCount}회
+                  </Badge>
                 </div>
               </div>
             ))}

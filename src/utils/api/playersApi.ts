@@ -16,7 +16,7 @@ export interface PlayerData {
   id: string;
   name: string;
   state: 'waiting' | 'priority' | 'resting' | 'playing' | 'queued';
-  gender?: '남' | '녀';
+  gender?: '남' | '여';
   rank?: 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
   gameCount: number;
   lastGameEndAt: Date | null;

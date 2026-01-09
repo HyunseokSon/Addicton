@@ -89,7 +89,7 @@ export function AddMemberDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="남">남</SelectItem>
-                <SelectItem value="녀">녀</SelectItem>
+                <SelectItem value="여">여</SelectItem>
               </SelectContent>
             </Select>
           </div>

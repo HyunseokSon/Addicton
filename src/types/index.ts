@@ -1,5 +1,5 @@
 export type PlayerState = 'waiting' | 'priority' | 'resting' | 'playing' | 'queued';
-export type Gender = '남' | '녀';
+export type Gender = '남' | '여';
 export type Rank = 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 export interface Member {

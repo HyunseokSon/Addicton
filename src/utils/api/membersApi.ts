@@ -252,36 +252,4 @@ export const membersApi = {
       throw error;
     }
   },
-
-  // Migrate gender values from 'male'/'female' to '남'/'녀'
-  async migrateGender(): Promise<{ membersUpdated: number; playersUpdated: number }> {
-    try {
-      console.log('🔄 Starting gender migration...');
-      
-      const response = await fetch(`${API_BASE}/members/migrate-gender`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('Failed to migrate gender:', error);
-        throw new Error(error.error || 'Failed to migrate gender');
-      }
-
-      const data = await response.json();
-      console.log(`✅ Gender migration complete: ${data.membersUpdated} members, ${data.playersUpdated} players updated`);
-      
-      return {
-        membersUpdated: data.membersUpdated || 0,
-        playersUpdated: data.playersUpdated || 0,
-      };
-    } catch (error) {
-      console.error('Error migrating gender:', error);
-      throw error;
-    }
-  },
 };

@@ -26,7 +26,7 @@ function calculatePlayerScore(player: Player): number {
   const baseScore = player.rank ? rankScores[player.rank] : 3.5; // Default to middle
   
   // Gender multiplier
-  const genderMultiplier = player.gender === '남' ? 1.2 : player.gender === '녀' ? 0.9 : 1.0;
+  const genderMultiplier = player.gender === '남' ? 1.2 : player.gender === '여' ? 0.9 : 1.0;
   
   return baseScore * genderMultiplier;
 }
